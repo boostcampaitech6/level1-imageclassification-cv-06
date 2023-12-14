@@ -92,7 +92,7 @@ def increment_path(path, exist_ok=False):
 def train(data_dir, model_dir, args):
     seed_everything(args.seed)
 
-    save_dir = increment_path(os.path.join(model_dir, args.name))
+    save_dir = increment_path(os.path.join(model_dir, args.model_type + "_" + args.name))
 
     # -- settings
     use_cuda = torch.cuda.is_available()
@@ -140,7 +140,7 @@ def train(data_dir, model_dir, args):
     )
 
     # -- model
-    model_module = getattr(import_module("model"), args.model)  # default: BaseModel
+    model_module = getattr(import_module("models." +args.model_type), args.model)  # default: BaseModel
     model = model_module(num_classes=num_classes).to(device)
     model = torch.nn.DataParallel(model)
 
@@ -339,10 +339,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_dir",
         type=str,
-        default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/input/data/train/images"),
+        # default=os.environ.get("SM_CHANNEL_TRAIN", "/opt/ml/input/data/train/images"),
+        # 이름이 SM_CHANNEL_TRAIN인 이유는, 아마존 SAGE MAKER에서 모델을 학습할 때 해당 환경변수 이름으로 Path를 지정하면 알아서 모델을 학습시켜 준다고 한다.
+        default=os.environ.get("SM_CHANNEL_TRAIN", "~/data/train/images"),
     )
     parser.add_argument(
         "--model_dir", type=str, default=os.environ.get("SM_MODEL_DIR", "./model")
+    )
+
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        help="you have to choose which task you will train",
+        default="age_model"
     )
 
     args = parser.parse_args()
