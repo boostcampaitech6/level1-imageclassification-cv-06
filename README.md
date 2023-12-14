@@ -67,24 +67,21 @@ pip install -r requirements.txt
 
 #### 학습
 
-아래의 두 명령어 중 하나를 이용해 모델을 학습시킵니다.
-
+1. 쉘 스크립트 내용을 알맞게 수정 
 ```
-SM_CHANNEL_TRAIN=/path/to/images SM_MODEL_DIR=/path/to/model python train.py
+(train_age.sh 예시)
+python train.py \
+--data_dir /data/ephemeral/home/data/train/images \  (학습 데이터 path)
+--model_dir /data/ephemeral/home/project/repo/level1-imageclassification-cv-06/ \  (모델 path)
+--model_type age_model \ (어떤 모델을 사용할 것인지)
+--dataset AgeModelDataset \
+--criterion focal
 ```
-
+2. 스크립트 실행
 ```
-python train.py --data_dir /path/to/images --model_dir /path/to/model
+cd ${project}
+./train_${task}.sh
 ```
-
 #### 추론
 
-아래의 두 명령어 증 하나를 통해 기학습된 모델로 특정 데이터셋을 추론합니다.
-
-```
-SM_CHANNEL_EVAL=/path/to/images SM_CHANNEL_MODEL=/path/to/model SM_OUTPUT_DATA_DIR=/path/to/output python inference.py
-```
-
-```
-python inference.py --data_dir /path/to/images --model_dir /path/to/model --output_dir /path/to/model
-```
+(아직 추론 기능은 논의가 필요하여 나중에 개발 예정입니다!!)
