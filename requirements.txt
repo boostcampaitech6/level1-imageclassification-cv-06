@@ -6,5 +6,7 @@ Pillow==9.4.0
 python-dotenv==1.0.0
 scikit-learn==1.2.2
 tensorboard==2.13.0
-torch==2.1.1
-torchvision==0.16.1
+torch==1.12.1+cu113 
+torchvision==0.13.1+cu113 
+torchaudio==0.12.1 
+--extra-index-url https://download.pytorch.org/whl/cu113
