@@ -111,11 +111,7 @@ def train(data_dir, model_dir, args):
     transform_module = getattr(
         import_module("dataset"), args.augmentation
     )  # default: BaseAugmentation
-    transform = transform_module(
-        resize=args.resize,
-        mean=dataset.mean,
-        std=dataset.std,
-    )
+    transform = transform_module(args, dataset)
     dataset.set_transform(transform)
 
     # -- data_loader
