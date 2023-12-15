@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
-
+import torchvision.models as models
 
 class BaseModel(nn.Module):
     """
@@ -54,6 +54,9 @@ class BaseModel(nn.Module):
 class MyModel(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
+        self.resnet34 = models.resnet34(pretrained=True)
+        in_features = self.resnet34.fc.in_features
+        self.resnet34.fc = nn.Linear(in_features, num_classes)
 
         """
         1. 위와 같이 생성자의 parameter 에 num_claases 를 포함해주세요.
@@ -66,4 +69,5 @@ class MyModel(nn.Module):
         1. 위에서 정의한 모델 아키텍쳐를 forward propagation 을 진행해주세요
         2. 결과로 나온 output 을 return 해주세요
         """
+        x = self.resnet34(x)
         return x
