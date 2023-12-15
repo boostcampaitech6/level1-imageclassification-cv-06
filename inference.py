@@ -73,10 +73,51 @@ def inference(data_dir, model_dir, output_dir, args):
     # 이미지 경로를 리스트로 생성한다.
     img_paths = [os.path.join(img_root, img_id) for img_id in info.ImageID]
 
-    dataset = TestDataset(img_paths, args.resize)
-    
-    loader = torch.utils.data.DataLoader(
-        dataset,
+
+    age_dataset = TestDataset(img_paths, args)
+    transform_module = getattr(
+        import_module("dataset"), args.age_augmentation
+    )  # default: BaseAugmentation
+    transform = transform_module(args, age_dataset)
+    age_dataset.set_transform(transform)
+
+
+    gender_dataset = TestDataset(img_paths, args)
+    transform_module = getattr(
+        import_module("dataset"), args.gender_augmentation
+    )  # default: BaseAugmentation
+    transform = transform_module(args, gender_dataset)
+    gender_dataset.set_transform(transform)
+
+
+    mask_dataset = TestDataset(img_paths, args)
+    transform_module = getattr(
+        import_module("dataset"), args.mask_augmentation
+    )  # default: BaseAugmentation
+    transform = transform_module(args, mask_dataset)
+    mask_dataset.set_transform(transform)
+
+
+    age_loader = torch.utils.data.DataLoader(
+        age_dataset,
+        batch_size=args.batch_size,
+        num_workers=multiprocessing.cpu_count() // 2,
+        shuffle=False,
+        pin_memory=use_cuda,
+        drop_last=False,
+    )
+
+    gender_loader = torch.utils.data.DataLoader(
+        gender_dataset,
+        batch_size=args.batch_size,
+        num_workers=multiprocessing.cpu_count() // 2,
+        shuffle=False,
+        pin_memory=use_cuda,
+        drop_last=False,
+    )
+
+    mask_loader = torch.utils.data.DataLoader(
+        mask_dataset,
         batch_size=args.batch_size,
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
@@ -91,21 +132,21 @@ def inference(data_dir, model_dir, output_dir, args):
 
     with torch.no_grad():
         print("Inferencing age...")
-        for idx, images in enumerate(loader):
+        for idx, images in enumerate(age_loader):
             images = images.to(device)
             pred = age_model(images)
             pred = pred.argmax(dim=-1)
             age_preds.extend(pred.cpu().numpy())
         
         print("Inferencing for age complete. Inferencing gender...")
-        for idx, images in enumerate(loader):
+        for idx, images in enumerate(gender_loader):
             images = images.to(device)
             pred = gender_model(images)
             pred = pred.argmax(dim=-1)
             gender_preds.extend(pred.cpu().numpy())
 
         print("Inferencing for gender complete. Inferencing mask...")
-        for idx, images in enumerate(loader):
+        for idx, images in enumerate(mask_loader):
             images = images.to(device)
             pred = mask_model(images)
             pred = pred.argmax(dim=-1)
@@ -114,7 +155,7 @@ def inference(data_dir, model_dir, output_dir, args):
         print("Inferencing Complete!")
     
     preds = []
-    for i in range(len(dataset)):
+    for i in range(len(age_dataset)):
         # 3개의 출력결과를 합쳐 18개의 Class로 통합해주는 부분
         preds.append(mask_preds[i]*6+gender_preds[i]*3+age_preds[i])
     
@@ -153,6 +194,18 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--mask_model", type=str, default="BaseModel", help="mask model type (default: BaseModel)"
+    )
+
+    parser.add_argument(
+        "--age_augmentation", type=str, default="BaseAugmentation", help="age augmentation type (default: BaseAugmentation)"
+    )
+
+    parser.add_argument(
+        "--gender_augmentation", type=str, default="BaseAugmentation", help="gender augmentation type (default: BaseAugmentation)"
+    )
+
+    parser.add_argument(
+        "--mask_augmentation", type=str, default="BaseAugmentation", help="mask augmentation type (default: BaseAugmentation)"
     )
 
     # 컨테이너 환경 변수

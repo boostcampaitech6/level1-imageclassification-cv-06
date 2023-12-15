@@ -393,19 +393,23 @@ class TestDataset(Dataset):
     """테스트 데이터셋 클래스"""
 
     def __init__(
-        self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)
+        self, img_paths, args, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)
     ):
         self.img_paths = img_paths
-        self.transform = Compose(
-            [
-                Resize(resize, Image.BILINEAR),
-                ToTensor(),
-                Normalize(mean=mean, std=std),
-            ]
-        )
+        self.mean = mean
+        self.std = std
+        # self.transform = Compose(
+        #     [
+        #         Resize(args.resize, Image.BILINEAR),
+        #         ToTensor(),
+        #         Normalize(mean=mean, std=std),
+        #     ]
+        # )
 
     def __getitem__(self, index):
         """인덱스에 해당하는 데이터를 가져오는 메서드"""
+        assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
+
         image = Image.open(self.img_paths[index])
 
         if self.transform:
@@ -415,6 +419,9 @@ class TestDataset(Dataset):
     def __len__(self):
         """데이터셋의 길이를 반환하는 메서드"""
         return len(self.img_paths)
+    
+    def set_transform(self, transform):
+        self.transform = transform
 
 
 class MaskModelDataset(Dataset):

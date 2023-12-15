@@ -5,3 +5,6 @@ python inference.py \
 --age_model MyModel \
 --gender_model MyModel \
 --mask_model MyModel \
+--age_augmentation BaseAugmentation \
+--gender_augmentation BaseAugmentation \
+--mask_augmentation BaseAugmentation \
