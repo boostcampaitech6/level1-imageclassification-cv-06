@@ -99,14 +99,14 @@ class AddGaussianNoise(object):
 class CustomAugmentation:
     """커스텀 Augmentation을 담당하는 클래스"""
 
-    def __init__(self, resize, mean, std, **args):
+    def __init__(self, agrs, dataset):
         self.transform = Compose(
             [
                 CenterCrop((320, 256)),
-                Resize(resize, Image.BILINEAR),
+                Resize(agrs.resize, Image.BILINEAR),
                 ColorJitter(0.1, 0.1, 0.1, 0.1),
                 ToTensor(),
-                Normalize(mean=mean, std=std),
+                Normalize(mean=dataset.mean, std=dataset.std),
                 AddGaussianNoise(),
             ]
         )
