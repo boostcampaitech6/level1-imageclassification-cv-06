@@ -36,19 +36,16 @@ ${project}
 1. 프로젝트를 위한 가상환경을 세팅합니다.
 
 ```
-# 1. 프로젝트 directory로 이동
-cd ${project}
-
-# 2. 파이썬 가상환경 만들기
+# 1. 파이썬 가상환경 만들기
 python -m venv {가상환경 path}
 
-# 3. 파이썬 가상환경 활성화
+# 2. 파이썬 가상환경 활성화
 source {가상환경 path}/bin/activate
 
-# 4. 필요 패키지 설치
+# 3. 필요 패키지 설치
 pip install -r requirements.txt
 
-# 5. 작업이 끝난 후 가상환경 비활성화
+# 4. 작업이 끝난 후 가상환경 비활성화
 deactivate
 ```
 
