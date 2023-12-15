@@ -244,9 +244,9 @@ def train(data_dir, model_dir, args):
                 print(
                     f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
                 )
-                torch.save(model.module.state_dict(), f"{save_dir}/best.pth")
+                torch.save(model.module.state_dict(), f"{save_dir}/{args.model_type}_best.pth")
                 best_val_acc = val_acc
-            torch.save(model.module.state_dict(), f"{save_dir}/last.pth")
+            torch.save(model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth")
             print(
                 f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
                 f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
