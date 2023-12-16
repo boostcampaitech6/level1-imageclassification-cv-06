@@ -17,6 +17,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from dataset import MaskBaseDataset
 from loss import create_criterion
+from sklearn.metrics import f1_score
+
 
 
 def seed_everything(seed):
@@ -204,6 +206,9 @@ def train(data_dir, model_dir, args):
             model.eval()
             val_loss_items = []
             val_acc_items = []
+            all_preds = []
+            all_labels = []
+
             figure = None
             for val_batch in val_loader:
                 inputs, labels = val_batch
@@ -212,6 +217,9 @@ def train(data_dir, model_dir, args):
 
                 outs = model(inputs)
                 preds = torch.argmax(outs, dim=-1)
+                
+                all_preds += outs.argmax(1).detach().cpu().numpy().tolist()
+                all_labels += labels.detach().cpu().numpy().tolist()
 
                 loss_item = criterion(outs, labels).item()
                 acc_item = (labels == preds).sum().item()
@@ -233,6 +241,7 @@ def train(data_dir, model_dir, args):
                         shuffle=args.dataset != "MaskSplitByProfileDataset",
                     )
 
+            val_f1 = f1_score(all_labels, all_preds, average='weighted')
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
@@ -245,10 +254,12 @@ def train(data_dir, model_dir, args):
             torch.save(model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth")
             print(
                 f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
-                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
+                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2} \n"
+                f"[Val] F1 Score: {val_f1:4.2}"
             )
             logger.add_scalar("Val/loss", val_loss, epoch)
             logger.add_scalar("Val/accuracy", val_acc, epoch)
+            logger.add_scalar("Val/f1", val_f1, epoch)
             logger.add_figure("results", figure, epoch)
             print()
 
