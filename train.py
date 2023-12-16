@@ -89,6 +89,28 @@ def increment_path(path, exist_ok=False):
         return f"{path}{n}"
 
 
+def run(args, train_set, val_set):
+    train_loader = DataLoader(
+        train_set,
+        batch_size=args.batch_size,
+        num_workers=multiprocessing.cpu_count() // 2,
+        shuffle=True,
+        pin_memory=torch.cuda.is_available(),
+        drop_last=True,
+    )
+
+    val_loader = DataLoader(
+        val_set,
+        batch_size=args.valid_batch_size,
+        num_workers=multiprocessing.cpu_count() // 2,
+        shuffle=False,
+        pin_memory=torch.cuda.is_available(),
+        drop_last=True,
+    )
+
+    return train_loader, val_loader
+
+
 def train(data_dir, model_dir, args):
     seed_everything(args.seed)
 
@@ -120,45 +142,8 @@ def train(data_dir, model_dir, args):
     # -- data_loader
     if args.model_type == "age_model" and k_fold != 1:
         splits = dataset.split_dataset2()
-        for train_set, val_set in splits:
-            train_loader = DataLoader(
-                train_set,
-                batch_size=args.batch_size,
-                num_workers=multiprocessing.cpu_count() // 2,
-                shuffle=True,
-                pin_memory=use_cuda,
-                drop_last=True,
-            )
-
-            val_loader = DataLoader(
-                val_set,
-                batch_size=args.valid_batch_size,
-                num_workers=multiprocessing.cpu_count() // 2,
-                shuffle=False,
-                pin_memory=use_cuda,
-                drop_last=True,
-            )
-    ##split에 따라 로드하는 거 새로 짜야함 함수
     else:
         splits = dataset.split_dataset()
-        for train_set, val_set in splits:
-            train_loader = DataLoader(
-                train_set,
-                batch_size=args.batch_size,
-                num_workers=multiprocessing.cpu_count() // 2,
-                shuffle=True,
-                pin_memory=use_cuda,
-                drop_last=True,
-            )
-
-            val_loader = DataLoader(
-                val_set,
-                batch_size=args.valid_batch_size,
-                num_workers=multiprocessing.cpu_count() // 2,
-                shuffle=False,
-                pin_memory=use_cuda,
-                drop_last=True,
-            )
 
     # -- model
     model_module = getattr(
@@ -185,10 +170,27 @@ def train(data_dir, model_dir, args):
 
     best_val_acc = 0
     best_val_loss = np.inf
-    for train_set, val_set in enumerate(splits):
+    iter = 0
+    for train_set, val_set in splits:
+        ### 학습 매 fold마다 독립적으로 진행되도록
+        model = model_module(num_classes=num_classes).to(device)
+        model = torch.nn.DataParallel(model)
+        optimizer = opt_module(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=args.lr,
+            weight_decay=5e-4,
+        )
+        scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+
+        # print("h")
+        # print(train_set, val_set)
+        train_loader, val_loader = run(args, train_set, val_set)
+        print(str(iter) + "번째 fold")
+        iter += 1
         for epoch in range(args.epochs):
             # train loop
             model.train()
+            # print("hh")
             loss_value = 0
             matches = 0
             for idx, train_batch in enumerate(train_loader):
