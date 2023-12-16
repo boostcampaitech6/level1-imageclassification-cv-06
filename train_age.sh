@@ -5,4 +5,5 @@ python train.py \
 --model BaseModel \
 --dataset AgeModelDataset \
 --criterion focal \
---optimizer Adam
+--optimizer Adam \
+--k_fold 5
