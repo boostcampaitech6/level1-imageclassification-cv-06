@@ -92,7 +92,9 @@ def increment_path(path, exist_ok=False):
 def train(data_dir, model_dir, args):
     seed_everything(args.seed)
 
-    save_dir = increment_path(os.path.join(model_dir, args.model_type + "_" + args.name))
+    save_dir = increment_path(
+        os.path.join(model_dir, args.model_type + "_" + args.name)
+    )
 
     # -- settings
     use_cuda = torch.cuda.is_available()
@@ -136,7 +138,9 @@ def train(data_dir, model_dir, args):
     )
 
     # -- model
-    model_module = getattr(import_module("models." +args.model_type), args.model)  # default: BaseModel
+    model_module = getattr(
+        import_module("models." + args.model_type), args.model
+    )  # default: BaseModel
     model = model_module(num_classes=num_classes).to(device)
     model = torch.nn.DataParallel(model)
 
@@ -240,9 +244,13 @@ def train(data_dir, model_dir, args):
                 print(
                     f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
                 )
-                torch.save(model.module.state_dict(), f"{save_dir}/{args.model_type}_best.pth")
+                torch.save(
+                    model.module.state_dict(), f"{save_dir}/{args.model_type}_best.pth"
+                )
                 best_val_acc = val_acc
-            torch.save(model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth")
+            torch.save(
+                model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth"
+            )
             print(
                 f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
                 f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
@@ -347,7 +355,14 @@ if __name__ == "__main__":
         "--model_type",
         type=str,
         help="you have to choose which task you will train",
-        default="age_model"
+        default="age_model",
+    )
+
+    parser.add_argument(
+        "--K_fold",
+        type=bool,
+        help="it uses Stratified K-fold Cross Validation",
+        default=False,
     )
 
     args = parser.parse_args()

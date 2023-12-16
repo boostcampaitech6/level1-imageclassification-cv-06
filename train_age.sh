@@ -4,4 +4,5 @@ python train.py \
 --model_type age_model \
 --model BaseModel \
 --dataset AgeModelDataset \
---criterion focal
+--criterion focal \
+--optimizer Adam
