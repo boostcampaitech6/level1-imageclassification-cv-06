@@ -140,10 +140,10 @@ def train(data_dir, model_dir, args):
 
     k_fold = args.k_fold
     # -- data_loader
-    if args.model_type == "age_model" and k_fold != 1:
+    if k_fold != 1:
         splits = dataset.split_dataset2()
     else:
-        splits = dataset.split_dataset()
+        splits = [dataset.split_dataset()]
 
     # -- model
     model_module = getattr(
@@ -170,7 +170,7 @@ def train(data_dir, model_dir, args):
 
     best_val_acc = 0
     best_val_loss = np.inf
-    iter = 0
+    iter = 1
     for train_set, val_set in splits:
         ### 학습 매 fold마다 독립적으로 진행되도록
         model = model_module(num_classes=num_classes).to(device)
