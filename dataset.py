@@ -6,6 +6,7 @@ from typing import Tuple, List
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision.transforms import (
@@ -167,7 +168,12 @@ class AgeLabels(int, Enum):
 
 
 class MaskBaseDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """마스크 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~18 중 1))
+    """
 
     num_classes = 3 * 2 * 3
 
@@ -419,13 +425,21 @@ class TestDataset(Dataset):
     def __len__(self):
         """데이터셋의 길이를 반환하는 메서드"""
         return len(self.img_paths)
-    
+
     def set_transform(self, transform):
         self.transform = transform
 
 
 class MaskModelDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """
+    마스크 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~3 중 1))
+
+    """
+
     num_classes = 3
 
     _file_names = {
@@ -447,12 +461,14 @@ class MaskModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
+        one_hot=False,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
+        self.one_hot = one_hot
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -500,6 +516,10 @@ class MaskModelDataset(Dataset):
 
     def get_mask_label(self, index) -> MaskLabels:
         """인덱스에 해당하는 마스크 라벨을 반환하는 메서드"""
+        if self.one_hot:
+            return F.one_hot(
+                torch.tensor(self.mask_labels[index] * 1), self.num_classes
+            ).float()
         return self.mask_labels[index]
 
     def read_image(self, index):
@@ -544,21 +564,30 @@ class MaskModelDataset(Dataset):
         img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
         return img_cp
 
+
 class AgeModelDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """
+    나이 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~3 중 1))
+
+    """
+
     num_classes = 3
 
     image_paths = []
     age_labels = []
 
     _file_names = {
-    "mask1": MaskLabels.MASK,
-    "mask2": MaskLabels.MASK,
-    "mask3": MaskLabels.MASK,
-    "mask4": MaskLabels.MASK,
-    "mask5": MaskLabels.MASK,
-    "incorrect_mask": MaskLabels.INCORRECT,
-    "normal": MaskLabels.NORMAL,
+        "mask1": MaskLabels.MASK,
+        "mask2": MaskLabels.MASK,
+        "mask3": MaskLabels.MASK,
+        "mask4": MaskLabels.MASK,
+        "mask5": MaskLabels.MASK,
+        "incorrect_mask": MaskLabels.INCORRECT,
+        "normal": MaskLabels.NORMAL,
     }
 
     def __init__(
@@ -567,12 +596,14 @@ class AgeModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
+        one_hot=False,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
+        self.one_hot = one_hot
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -620,6 +651,10 @@ class AgeModelDataset(Dataset):
 
     def get_age_label(self, index) -> AgeLabels:
         """인덱스에 해당하는 나이 라벨을 반환하는 메서드"""
+        if self.one_hot:
+            return F.one_hot(
+                torch.tensor(self.age_labels[index] * 1), self.num_classes
+            ).float()
         return self.age_labels[index]
 
     def read_image(self, index):
@@ -636,7 +671,7 @@ class AgeModelDataset(Dataset):
         n_train = len(self) - n_val
         train_set, val_set = random_split(self, [n_train, n_val])
         return train_set, val_set
-    
+
     def calc_statistics(self):
         """데이터셋의 통계치를 계산하는 메서드"""
         has_statistics = self.mean is not None and self.std is not None
@@ -666,7 +701,14 @@ class AgeModelDataset(Dataset):
 
 
 class GenderModelDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """
+    성별 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~3 중 1))
+    """
+
     num_classes = 2
 
     image_paths = []
@@ -687,12 +729,14 @@ class GenderModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
+        one_hot=False,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
+        self.one_hot = one_hot
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -741,6 +785,10 @@ class GenderModelDataset(Dataset):
 
     def get_gender_label(self, index) -> GenderLabels:
         """인덱스에 해당하는 성별 라벨을 반환하는 메서드"""
+        if self.one_hot:
+            return F.one_hot(
+                torch.tensor(self.gender_labels[index] * 1), self.num_classes
+            ).float()
         return self.gender_labels[index]
 
     def read_image(self, index):
