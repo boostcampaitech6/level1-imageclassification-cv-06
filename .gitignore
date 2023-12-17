@@ -176,3 +176,9 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 *_exp*/
+
+# Ignore .sh files
+*.sh
+
+# ignore pre-commit yaml file
+.pre-commit-config.yaml
