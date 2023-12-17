@@ -7,7 +7,7 @@ from typing import Tuple, List
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image
+from PIL import Image, ImageEnhance
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision.transforms import (
     Resize,
@@ -64,6 +64,49 @@ class BaseAugmentation:
         self.transform = Compose(
             [
                 Resize(args.resize, Image.BILINEAR),
+                ToTensor(),
+                Normalize(mean=dataset.mean, std=dataset.std),
+            ]
+        )
+
+    def __call__(self, image):
+        """
+        이미지에 저장된 transform 적용
+
+        Args:
+            Image (PIL.Image): Augumentation을 적용할 이미지
+
+        Returns:
+            Tensor: Argumentation이 적용된 이미지
+        """
+        return self.transform(image)
+
+
+class CustomSharpenTransform:
+    """
+    이미지를 날카롭게 만드는 Transform
+    """
+
+    def __init__(self, factor=2.5):
+        self.factor = factor
+
+    def __call__(self, img):
+        enhancer = ImageEnhance.Sharpness(img)
+        img = enhancer.enhance(self.factor)
+        return img
+
+
+class SharpenAugmentation:
+    """
+    Image를 날카롭게 만드는 Augmentation.
+    기본적인 Normalize도 포함되어 있다.
+    """
+
+    def __init__(self, args, dataset):
+        self.transform = Compose(
+            [
+                Resize(args.resize, Image.BILINEAR),
+                CustomSharpenTransform(),
                 ToTensor(),
                 Normalize(mean=dataset.mean, std=dataset.std),
             ]
@@ -658,16 +701,15 @@ class CutMixMaskModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
-        cutmix_augmentation=None,
-        cutmix_prob=0.5,
+        cutmix_prob=0.49,
+        one_hot=True,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
-        self.cutmix_augmentation = cutmix_augmentation
-        self.cutmix_prob = cutmix_prob
+        self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -705,25 +747,18 @@ class CutMixMaskModelDataset(Dataset):
         origin_image = self.read_image(index)
         origin_mask_label = self.get_mask_label(index)
 
-        # cutmix_prob 확률에 따라서 mix 할 지 하지 않을지 결정.
-        if self.cutmix_augmentation and random.random() < self.cutmix_prob:
-            cutmix_index = random.randint(0, len(self.image_paths) - 1)
-            cutmix_image = self.read_image(cutmix_index)
-            cutmix_age_label = self.get_mask_label(cutmix_index)
-            augmented_img, augmented_label = self.cutmix_augmentation(
-                origin_image, origin_mask_label, cutmix_image, cutmix_age_label
-            )
-            if self.transform:
-                image_transform = self.transform(augmented_img)
-                return image_transform, augmented_label
-            return augmented_img, augmented_label
-
+        cutmix_index = random.randint(0, len(self.image_paths) - 1)
+        cutmix_image = self.read_image(cutmix_index)
+        cutmix_age_label = self.get_mask_label(cutmix_index)
+        augmented_img, augmented_label = self.cutmix_augmentation(
+            origin_image, origin_mask_label, cutmix_image, cutmix_age_label
+        )
         if self.transform:
-            image_transform = self.transform(origin_image)
-            return image_transform, origin_mask_label
+            image_transform = self.transform(augmented_img)
+            return image_transform, augmented_label
 
         # 라벨로 one-hot vector 리턴.
-        return origin_image, origin_mask_label
+        return augmented_img, augmented_label
 
     def __len__(self):
         """데이터셋의 길이를 반환하는 메서드"""
@@ -945,16 +980,15 @@ class CutMixAgeModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
-        cutmix_augmentation=None,
-        cutmix_prob=0.5,
+        cutmix_prob=0.49,
+        one_hot=True,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
-        self.cutmix_augmentation = cutmix_augmentation
-        self.cutmix_prob = cutmix_prob
+        self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -993,25 +1027,18 @@ class CutMixAgeModelDataset(Dataset):
         origin_image = self.read_image(index)
         origin_age_label = self.get_age_label(index)
 
-        # cutmix_prob 확률에 따라서 mix 할 지 하지 않을지 결정.
-        if self.cutmix_augmentation and random.random() < self.cutmix_prob:
-            cutmix_index = random.randint(0, len(self.image_paths) - 1)
-            cutmix_image = self.read_image(cutmix_index)
-            cutmix_age_label = self.get_age_label(cutmix_index)
-            augmented_img, augmented_label = self.cutmix_augmentation(
-                origin_image, origin_age_label, cutmix_image, cutmix_age_label
-            )
-            if self.transform:
-                image_transform = self.transform(augmented_img)
-                return image_transform, augmented_label
-            return augmented_img, augmented_label
-
+        cutmix_index = random.randint(0, len(self.image_paths) - 1)
+        cutmix_image = self.read_image(cutmix_index)
+        cutmix_age_label = self.get_age_label(cutmix_index)
+        augmented_img, augmented_label = self.cutmix_augmentation(
+            origin_image, origin_age_label, cutmix_image, cutmix_age_label
+        )
         if self.transform:
-            image_transform = self.transform(origin_image)
-            return image_transform, origin_age_label
+            image_transform = self.transform(augmented_img)
+            return image_transform, augmented_label
 
         # 라벨로 one-hot vector 리턴.
-        return origin_image, origin_age_label
+        return augmented_img, augmented_label
 
     def __len__(self):
         """데이터셋의 길이를 반환하는 메서드"""
@@ -1232,16 +1259,15 @@ class CutMixGenderModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
-        cutmix_augmentation=None,
-        cutmix_prob=0.5,
+        cutmix_prob=0.49,
+        one_hot=True,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
-        self.cutmix_augmentation = cutmix_augmentation
-        self.cutmix_prob = cutmix_prob
+        self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -1280,25 +1306,17 @@ class CutMixGenderModelDataset(Dataset):
         origin_image = self.read_image(index)
         origin_age_label = self.get_gender_label(index)
 
-        # cutmix_prob 확률에 따라서 mix 할 지 하지 않을지 결정.
-        if self.cutmix_augmentation and random.random() < self.cutmix_prob:
-            cutmix_index = random.randint(0, len(self.image_paths) - 1)
-            cutmix_image = self.read_image(cutmix_index)
-            cutmix_gender_label = self.get_gender_label(cutmix_index)
-            augmented_img, augmented_label = self.cutmix_augmentation(
-                origin_image, origin_age_label, cutmix_image, cutmix_gender_label
-            )
-            if self.transform:
-                image_transform = self.transform(augmented_img)
-                return image_transform, augmented_label
-            return augmented_img, augmented_label
-
+        cutmix_index = random.randint(0, len(self.image_paths) - 1)
+        cutmix_image = self.read_image(cutmix_index)
+        cutmix_gender_label = self.get_gender_label(cutmix_index)
+        augmented_img, augmented_label = self.cutmix_augmentation(
+            origin_image, origin_age_label, cutmix_image, cutmix_gender_label
+        )
         if self.transform:
-            image_transform = self.transform(origin_image)
-            return image_transform, origin_age_label
-
+            image_transform = self.transform(augmented_img)
+            return image_transform, augmented_label
         # 라벨로 one-hot vector 리턴.
-        return origin_image, origin_age_label
+        return augmented_img, augmented_label
 
     def __len__(self):
         """데이터셋의 길이를 반환하는 메서드"""
