@@ -72,7 +72,7 @@ for file in os.listdir('/data/ephemeral/home/data/eval/images/'):
 source = '/data/ephemeral/home/data/eval/info.csv'
 
 destination = '/data/ephemeral/home/new_data/eval/info.csv'
-
+ 
 shutil.copyfile(source, destination)
 print('eval end')
 
