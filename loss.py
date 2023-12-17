@@ -73,12 +73,33 @@ class F1Loss(nn.Module):
         return 1 - f1.mean()
 
 
+class CutMixF1Loss(nn.Module):
+    def __init__(self, classes=3, epsilon=1e-7):
+        super().__init__()
+        self.classes = classes
+        self.epsilon = epsilon
+
+    def forward(self, y_pred, y_true):
+        tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
+        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
+        fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
+        fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
+
+        precision = tp / (tp + fp + self.epsilon)
+        recall = tp / (tp + fn + self.epsilon)
+
+        f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
+        f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
+        return 1 - f1.mean()
+
+
 # 사용 가능한 손실 함수의 진입점
 _criterion_entrypoints = {
     "cross_entropy": nn.CrossEntropyLoss,
     "focal": FocalLoss,
     "label_smoothing": LabelSmoothingLoss,
     "f1": F1Loss,
+    "cutmix_f1": CutMixF1Loss,
 }
 
 
