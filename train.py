@@ -206,8 +206,7 @@ def train(data_dir, model_dir, args):
             model.eval()
             val_loss_items = []
             val_acc_items = []
-            all_preds = []
-            all_labels = []
+            val_f1_items = [] # F1점수 저장 리스트
 
             figure = None
             for val_batch in val_loader:
@@ -218,13 +217,16 @@ def train(data_dir, model_dir, args):
                 outs = model(inputs)
                 preds = torch.argmax(outs, dim=-1)
                 
-                all_preds += outs.argmax(1).detach().cpu().numpy().tolist()
-                all_labels += labels.detach().cpu().numpy().tolist()
+                #F1 점수 계산
+                f1_item = f1_score(labels.cpu().numpy(), preds.cpu().numpy(), average='macro')
+                val_f1_items.append(f1_item)
 
                 loss_item = criterion(outs, labels).item()
                 acc_item = (labels == preds).sum().item()
+
                 val_loss_items.append(loss_item)
                 val_acc_items.append(acc_item)
+                val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
 
                 if figure is None:
                     inputs_np = (
@@ -241,7 +243,6 @@ def train(data_dir, model_dir, args):
                         shuffle=args.dataset != "MaskSplitByProfileDataset",
                     )
 
-            val_f1 = f1_score(all_labels, all_preds, average='weighted')
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
