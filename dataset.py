@@ -523,18 +523,32 @@ class MaskModelDataset(Dataset):
 
         return train_set, val_set
 
-    def split_dataset2(self) -> Generator[Tuple[Subset, Subset], None, None]:
+    def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 일반 K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        KFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        kf = KFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in kf.split(self):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.age_labels)[train_index]
+            label_test = np.array(self.age_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def split_dataset3(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
         """데이터셋을 Stratified K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
         데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
         StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
         """
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-        for train_index, val_index in skf.split(range(len(self)), self.mask_labels):
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in skf.split(range(len(self)), self.age_labels):
             train_set = Subset(self, train_index)
             val_set = Subset(self, val_index)
-            label_train = np.array(self.mask_labels)[train_index]
-            label_test = np.array(self.mask_labels)[val_index]
+            label_train = np.array(self.age_labels)[train_index]
+            label_test = np.array(self.age_labels)[val_index]
             print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
             print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
             yield train_set, val_set
@@ -662,19 +676,28 @@ class AgeModelDataset(Dataset):
 
         return train_set, val_set
 
-    def split_dataset2(self) -> Generator[Tuple[Subset, Subset], None, None]:
+    def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 일반 K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        KFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        kf = KFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in kf.split(self):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.age_labels)[train_index]
+            label_test = np.array(self.age_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def split_dataset3(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
         """데이터셋을 Stratified K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
         데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
         StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
         """
-        # skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        kf = KFold(n_splits=5, shuffle=True, random_state=42)
-        # for train_index, val_index in skf.split(range(len(self)), self.age_labels):
-        #     train_set = Subset(self, train_index)
-        #     val_set = Subset(self, val_index)
-        #     label_train = np.array(self.age_labels)[train_index]
-        #     label_test = np.array(self.age_labels)[val_index]
-        for train_index, val_index in kf.split(self):
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in skf.split(range(len(self)), self.age_labels):
             train_set = Subset(self, train_index)
             val_set = Subset(self, val_index)
             label_train = np.array(self.age_labels)[train_index]
@@ -806,18 +829,32 @@ class GenderModelDataset(Dataset):
 
         return train_set, val_set
 
-    def split_dataset2(self) -> Generator[Tuple[Subset, Subset], None, None]:
+    def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 일반 K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        KFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        kf = KFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in kf.split(self):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.age_labels)[train_index]
+            label_test = np.array(self.age_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def split_dataset3(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
         """데이터셋을 Stratified K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
         데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
         StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
         """
-        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-        for train_index, val_index in skf.split(range(len(self)), self.gender_labels):
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in skf.split(range(len(self)), self.age_labels):
             train_set = Subset(self, train_index)
             val_set = Subset(self, val_index)
-            label_train = np.array(self.gender_labels)[train_index]
-            label_test = np.array(self.gender_labels)[val_index]
+            label_train = np.array(self.age_labels)[train_index]
+            label_test = np.array(self.age_labels)[val_index]
             print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
             print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
             yield train_set, val_set

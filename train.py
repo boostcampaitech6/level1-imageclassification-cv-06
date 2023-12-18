@@ -138,12 +138,15 @@ def train(data_dir, model_dir, args):
     transform = transform_module(args, dataset)
     dataset.set_transform(transform)
 
-    k_fold = args.k_fold
     # -- data_loader
-    if k_fold != 1:
-        splits = dataset.split_dataset2()
-    else:
+    k_fold_type = args.k_fold_type
+    k_fold = args.k_fold
+    if k_fold_type == 0:
         splits = [dataset.split_dataset()]
+    elif k_fold_type == 1:
+        splits = dataset.split_dataset2(k_fold)
+    elif k_fold_type == 2:
+        splits = dataset.split_dataset3(k_fold)
 
     # -- model
     model_module = getattr(
@@ -393,8 +396,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--k_fold",
         type=int,
-        help="it uses Stratified K-fold Cross Validation",
-        default=1,
+        help="k for (Stratified) K-fold Cross Validation",
+        default=5,
+    )
+
+    parser.add_argument(
+        "--k_fold_type",
+        type=int,
+        help="0: No K-fold, 1: K-fold, 2: Stratified K-fold",
+        default=0,
     )
 
     args = parser.parse_args()

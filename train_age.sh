@@ -6,5 +6,6 @@ python train.py \
 --dataset AgeModelDataset \
 --criterion focal \
 --optimizer Adam \
---epoch 5
-# --k_fold 5 \
+--k_fold 5 \
+--k_fold_type 1 \
+--epochs 5 \
