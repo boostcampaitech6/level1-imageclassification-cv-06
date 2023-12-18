@@ -226,7 +226,7 @@ def train(data_dir, model_dir, args):
 
                 val_loss_items.append(loss_item)
                 val_acc_items.append(acc_item)
-                val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
+                
 
                 if figure is None:
                     inputs_np = (
@@ -246,6 +246,7 @@ def train(data_dir, model_dir, args):
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
+            val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
             if val_acc > best_val_acc:
                 print(
                     f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
