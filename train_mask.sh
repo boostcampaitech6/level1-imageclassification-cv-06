@@ -5,4 +5,6 @@ python train.py \
 --model MyModel \
 --dataset MaskModelDataset \
 --criterion focal \
---epochs 5 \
+--optimizer Adam \
+--k_fold 5 \
+--epoch 5

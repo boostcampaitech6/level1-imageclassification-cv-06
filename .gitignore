@@ -176,3 +176,14 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 *_exp*/
+
+### pre-commit
+.pre-commit-config.yaml
+
+### age sh
+train_age.sh
+inference.sh
+train_gender.sh
+train_mask.sh
+output.csv
+*.pth
