@@ -73,7 +73,11 @@ class F1Loss(nn.Module):
         return 1 - f1.mean()
 
 
-class CutMixF1Loss(nn.Module):
+class OneHotF1Loss(nn.Module):
+    """
+    label이 one-hot style로 나오는 경우 사용하는 F1Loss
+    """
+
     def __init__(self, classes=3, epsilon=1e-7):
         super().__init__()
         self.classes = classes
@@ -99,7 +103,7 @@ _criterion_entrypoints = {
     "focal": FocalLoss,
     "label_smoothing": LabelSmoothingLoss,
     "f1": F1Loss,
-    "cutmix_f1": CutMixF1Loss,
+    "one_hot_f1": OneHotF1Loss,
 }
 
 
