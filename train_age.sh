@@ -6,6 +6,8 @@ python train.py \
 --dataset AgeModelDataset \
 --criterion focal \
 --optimizer Adam \
+#"k for (Stratified) K-fold Cross Validation"
 --k_fold 5 \
+#"0: No K-fold, 1: K-fold, 2: Stratified K-fold"
 --k_fold_type 1 \
 --epochs 5 \
