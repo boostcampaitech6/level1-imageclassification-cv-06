@@ -35,7 +35,7 @@ def get_lr(optimizer):
         return param_group["lr"]
 
 
-def grid_image(np_images, gts, preds, n=16, shuffle=False):
+def grid_image(np_images, gts, preds, n=16, shuffle=False, iscutmix=False):
     batch_size = np_images.shape[0]
     assert n <= batch_size
 
@@ -50,8 +50,14 @@ def grid_image(np_images, gts, preds, n=16, shuffle=False):
     tasks = ["mask", "gender", "age"]
     for idx, choice in enumerate(choices):
         if args.one_hot:
-            gt = gts[choice]
-            pred = preds[choice]
+            if iscutmix:
+                _, gt = gts[choice].topk(2, 0, True, True)
+                _, pred = preds[choice].topk(2, 0, True, True)
+                gt = gt.tolist()
+                pred = pred.tolist()
+            else:
+                gt = gts[choice]
+                pred = preds[choice]
             image = np_images[choice]
             title = "\n".join([f"gt: {gt}, pred: {pred}"])
         else:
@@ -244,8 +250,8 @@ def train(data_dir, model_dir, args):
                 if args.one_hot:
                     if iscutmix:
                         _, pred = outs.topk(2, 1, True, True)
-                        _, labels = labels.topk(2, 1, True, True)
-                        correct = pred.eq(labels)
+                        _, topklabels = labels.topk(2, 1, True, True)
+                        correct = pred.eq(topklabels)
 
                         acc_item = correct.all(dim=1).sum().item()
                     else:
@@ -276,6 +282,7 @@ def train(data_dir, model_dir, args):
                             outs,
                             n=16,
                             shuffle=args.dataset != "MaskSplitByProfileDataset",
+                            iscutmix=iscutmix,
                         )
                     else:
                         figure = grid_image(
