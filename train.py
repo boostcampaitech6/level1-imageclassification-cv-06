@@ -17,8 +17,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from dataset import MaskBaseDataset
 from loss import create_criterion
-from sklearn.metrics import f1_score
 
+from sklearn.metrics import f1_score
 
 
 def seed_everything(seed):
@@ -216,17 +216,13 @@ def train(data_dir, model_dir, args):
 
                 outs = model(inputs)
                 preds = torch.argmax(outs, dim=-1)
-                
+
                 #F1 점수 계산
                 f1_item = f1_score(labels.cpu().numpy(), preds.cpu().numpy(), average='macro')
                 val_f1_items.append(f1_item)
 
                 loss_item = criterion(outs, labels).item()
                 acc_item = (labels == preds).sum().item()
-
-                val_loss_items.append(loss_item)
-                val_acc_items.append(acc_item)
-                
 
                 if figure is None:
                     inputs_np = (
@@ -246,7 +242,9 @@ def train(data_dir, model_dir, args):
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
+
             val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
+
             if val_acc > best_val_acc:
                 print(
                     f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
