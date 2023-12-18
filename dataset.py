@@ -956,13 +956,16 @@ class CutMixAgeModelDataset(Dataset):
         val_ratio
         cutmix_augmentation (CutMixVerticalAugmentation): CutMix 수행하는 Class
         cutmix_prob (float): CutMix를 수행 할 확률
-
+        use_skewed (bool): 데이터가 skewed되어 있다면 skewe된 데이터만 mix하게 결정하는 flag
+        skew_prob (float): use_skewd가 True인 경우, 특정 확률로 skew된 데이터를 mix하도록 함.
     """
 
     num_classes = 3
 
     image_paths = []
     age_labels = []
+    skewed_image_paths = []
+    skewed_age_labels = []
 
     _file_names = {
         "mask1": MaskLabels.MASK,
@@ -982,6 +985,8 @@ class CutMixAgeModelDataset(Dataset):
         val_ratio=0.2,
         cutmix_prob=0.49,
         one_hot=True,
+        use_skewed=True,
+        skew_prob=0.6,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
@@ -989,6 +994,8 @@ class CutMixAgeModelDataset(Dataset):
         self.std = std
         self.transform = None
         self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
+        self.use_skewed = use_skewed
+        self.skew_prob = skew_prob
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -1016,6 +1023,10 @@ class CutMixAgeModelDataset(Dataset):
                 self.image_paths.append(img_path)
                 self.age_labels.append(age_label)
 
+                if age_label == AgeLabels.OLD:
+                    self.skewed_image_paths.append(img_path)
+                    self.skewed_age_labels.append(age_label)
+
     def set_transform(self, transform):
         """변환(transform)을 설정하는 메서드"""
         self.transform = transform
@@ -1027,9 +1038,16 @@ class CutMixAgeModelDataset(Dataset):
         origin_image = self.read_image(index)
         origin_age_label = self.get_age_label(index)
 
-        cutmix_index = random.randint(0, len(self.image_paths) - 1)
-        cutmix_image = self.read_image(cutmix_index)
-        cutmix_age_label = self.get_age_label(cutmix_index)
+        if self.use_skewed and random.random() < self.skew_prob:
+            cutmix_index = random.randint(0, len(self.skewed_image_paths) - 1)
+            cutmix_image = self.read_image(cutmix_index, self.use_skewed)
+            cutmix_age_label = self.get_age_label(cutmix_index, self.use_skewed)
+
+        else:
+            cutmix_index = random.randint(0, len(self.image_paths) - 1)
+            cutmix_image = self.read_image(cutmix_index)
+            cutmix_age_label = self.get_age_label(cutmix_index)
+
         augmented_img, augmented_label = self.cutmix_augmentation(
             origin_image, origin_age_label, cutmix_image, cutmix_age_label
         )
@@ -1044,13 +1062,20 @@ class CutMixAgeModelDataset(Dataset):
         """데이터셋의 길이를 반환하는 메서드"""
         return len(self.image_paths)
 
-    def get_age_label(self, index) -> AgeLabels:
+    def get_age_label(self, index, skewed=False) -> AgeLabels:
         """인덱스에 해당하는 나이 라벨을 반환하는 메서드"""
+        if skewed:
+            return F.one_hot(
+                torch.tensor(self.skewed_age_labels[index] * 1), self.num_classes
+            )
         return F.one_hot(torch.tensor(self.age_labels[index] * 1), self.num_classes)
 
-    def read_image(self, index):
+    def read_image(self, index, skewed=False):
         """인덱스에 해당하는 이미지를 읽는 메서드"""
-        image_path = self.image_paths[index]
+        if skewed:
+            image_path = self.skewed_image_paths[index]
+        else:
+            image_path = self.image_paths[index]
         return Image.open(image_path)
 
     def split_dataset(self) -> Tuple[Subset, Subset]:
