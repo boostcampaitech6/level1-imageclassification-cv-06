@@ -223,6 +223,8 @@ def train(data_dir, model_dir, args):
 
                 loss_item = criterion(outs, labels).item()
                 acc_item = (labels == preds).sum().item()
+                val_loss_items.append(loss_item)
+                val_acc_items.append(acc_item)
 
                 if figure is None:
                     inputs_np = (
