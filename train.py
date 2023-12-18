@@ -158,7 +158,7 @@ def train(data_dir, model_dir, args):
         lr=args.lr,
         weight_decay=5e-4,
     )
-    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.1)
 
     # -- logging
     logger = SummaryWriter(log_dir=save_dir)
@@ -188,11 +188,20 @@ def train(data_dir, model_dir, args):
             loss_value += loss.item()
 
             if args.one_hot:
+                # topk = 2
+                _, pred = outs.topk(2, 1, True, True)
+                _, labels = labels.topk(2, 1, True, True)
+                correct = pred.eq(labels)
+
+                matches += correct.all(dim=1).sum().item()
+                """
+                일반적인 경우는 아래를 사용해야 한다. 아직 코드를 제대로 만들지 못했다.
                 matches += (
                     (torch.argmax(outs, dim=-1) == torch.argmax(labels, dim=-1))
                     .sum()
                     .item()
                 )
+                """
             else:
                 if outs.dim() != 1:
                     outs = torch.argmax(outs, dim=-1)
@@ -203,7 +212,8 @@ def train(data_dir, model_dir, args):
                 current_lr = get_lr(optimizer)
                 print(
                     f"Epoch[{epoch + 1}/{args.epochs}]({idx + 1}/{len(train_loader)}) || "
-                    f"training loss {train_loss:4.4} || training accuracy {train_acc:4.2%} || lr {current_lr}"
+                    f"training loss {train_loss:4.4f} || training accuracy {train_acc:4.2%} || lr {current_lr}",
+                    end="\r",
                 )
                 logger.add_scalar(
                     "Train/loss", train_loss, epoch * len(train_loader) + idx
@@ -216,7 +226,7 @@ def train(data_dir, model_dir, args):
                 matches = 0
 
         scheduler.step()
-
+        print()
         # val loop
         with torch.no_grad():
             print("Calculating validation results...")
@@ -234,11 +244,19 @@ def train(data_dir, model_dir, args):
                 loss_item = criterion(outs, labels).item()
 
                 if args.one_hot:
+                    _, pred = outs.topk(2, 1, True, True)
+                    _, labels = labels.topk(2, 1, True, True)
+                    correct = pred.eq(labels)
+
+                    acc_item = correct.all(dim=1).sum().item()
+                    """
+                    일반적인 경우는 아래를 사용해야 한다. 아직 코드를 제대로 만들지 못했다.
                     acc_item = (
                         (torch.argmax(outs, dim=-1) == torch.argmax(labels, dim=-1))
                         .sum()
                         .item()
                     )
+                    """
                 else:
                     if outs.dim() != 1:
                         outs = torch.argmax(outs, dim=-1)
@@ -379,6 +397,12 @@ if __name__ == "__main__":
         type=int,
         default=20,
         help="learning rate scheduler deacy step (default: 20)",
+    )
+    parser.add_argument(
+        "--lr_decay_gamma",
+        type=float,
+        default=0.5,
+        help="gamma value scheduler deacy step (default: 0.5)",
     )
     parser.add_argument(
         "--log_interval",
