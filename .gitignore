@@ -177,8 +177,16 @@ pyrightconfig.json
 
 *_exp*/
 
+### pre-commit
+.pre-commit-config.yaml
+
+### age sh
+train_age.sh
+inference.sh
+train_gender.sh
+train_mask.sh
+output.csv
+*.pth
+
 # Ignore .sh files
 *.sh
-
-# ignore pre-commit yaml file
-.pre-commit-config.yaml
