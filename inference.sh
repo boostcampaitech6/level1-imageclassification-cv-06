@@ -10,3 +10,5 @@ python inference.py \
 --age_augmentation BaseAugmentation \
 --gender_augmentation BaseAugmentation \
 --mask_augmentation MaskAugmentation \
+&& \
+rm -f best_model/mask_model_best.pth \
