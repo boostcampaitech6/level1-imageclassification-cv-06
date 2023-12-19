@@ -6,7 +6,7 @@ python train.py \
 --dataset GenderModelDataset \
 --criterion focal \
 --epochs 25 \
---augmentation BaseAugmentation \
+--augmentation CustomAugmentation \
 --resize 224 224 \
 --batch_size 64 \
 --valid_batch_size 100 \

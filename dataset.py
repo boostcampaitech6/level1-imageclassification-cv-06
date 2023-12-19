@@ -6,6 +6,7 @@ from typing import Tuple, List
 
 import numpy as np
 import torch
+import torchvision
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision.transforms import (
@@ -15,7 +16,11 @@ from torchvision.transforms import (
     Compose,
     CenterCrop,
     ColorJitter,
+    AutoAugmentPolicy,
+    AutoAugment
 )
+
+
 
 # 지원되는 이미지 확장자 리스트
 IMG_EXTENSIONS = [
@@ -102,12 +107,13 @@ class CustomAugmentation:
     def __init__(self, agrs, dataset):
         self.transform = Compose(
             [
-                CenterCrop((320, 256)),
+                # CenterCrop((320, 256)),
                 Resize(agrs.resize, Image.BILINEAR),
-                ColorJitter(0.1, 0.1, 0.1, 0.1),
+                AutoAugment(policy=AutoAugmentPolicy()),
+                # ColorJitter(0.1, 0.1, 0.1, 0.1),
                 ToTensor(),
                 Normalize(mean=dataset.mean, std=dataset.std),
-                AddGaussianNoise(),
+                # AddGaussianNoise(),
             ]
         )
 
