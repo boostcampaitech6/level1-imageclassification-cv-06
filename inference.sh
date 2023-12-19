@@ -1,3 +1,5 @@
+cat best_model/mask_model_best.tar* | tar xvf - -C ./best_model/ \
+&& \
 python inference.py \
 --data_dir /data/ephemeral/home/data/eval \
 --model_dir /data/ephemeral/home/project/repo/level1-imageclassification-cv-06/best_model \
