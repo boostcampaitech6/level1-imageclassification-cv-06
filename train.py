@@ -19,6 +19,8 @@ from dataset import MaskBaseDataset
 from loss import create_criterion
 import torch.nn.functional as F
 
+from sklearn.metrics import f1_score
+
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -157,7 +159,9 @@ def train(data_dir, model_dir, args):
     model = torch.nn.DataParallel(model)
 
     # -- loss & metric
-    criterion = create_criterion(args.criterion)  # default: cross_entropy
+    criterion = create_criterion(
+        args.criterion, classes=dataset.num_classes
+    )  # default: cross_entropy
     opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
     optimizer = opt_module(
         filter(lambda p: p.requires_grad, model.parameters()),
@@ -173,6 +177,7 @@ def train(data_dir, model_dir, args):
 
     best_val_acc = 0
     best_val_loss = np.inf
+    best_val_f1 = 0
     for epoch in range(args.epochs):
         # train loop
         model.train()
@@ -237,6 +242,8 @@ def train(data_dir, model_dir, args):
             model.eval()
             val_loss_items = []
             val_acc_items = []
+            val_f1_items = []  # F1점수 저장 리스트
+
             figure = None
             for val_batch in val_loader:
                 inputs, labels = val_batch
@@ -244,6 +251,13 @@ def train(data_dir, model_dir, args):
                 labels = labels.to(device)
 
                 outs = model(inputs)
+                if args.eval_f1:
+                    preds = torch.argmax(outs, dim=-1)
+                    # F1 점수 계산
+                    f1_item = f1_score(
+                        labels.cpu().numpy(), preds.cpu().numpy(), average="macro"
+                    )
+                    val_f1_items.append(f1_item)
 
                 loss_item = criterion(outs, labels).item()
 
@@ -296,23 +310,34 @@ def train(data_dir, model_dir, args):
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
+
+            if args.eval_f1:
+                val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
+
             if val_acc > best_val_acc:
                 print(
-                    f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
+                    f"New best model for val accuracy : {val_acc:4.2%}. saving the best model.."
                 )
+                if args.eval_f1:
+                    print(f"val f1 : {val_f1:.4f}!")
                 torch.save(
                     model.module.state_dict(), f"{save_dir}/{args.model_type}_best.pth"
                 )
                 best_val_acc = val_acc
+                if args.eval_f1:
+                    best_val_f1 = val_f1
             torch.save(
                 model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth"
             )
-            print(
-                f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
-                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
-            )
+
+            print(f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || ", end="")
+            if args.eval_f1:
+                print(f"[Val] F1 Score: {val_f1:4.2} || ", end="")
+            print(f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2} \n")
             logger.add_scalar("Val/loss", val_loss, epoch)
             logger.add_scalar("Val/accuracy", val_acc, epoch)
+            if args.eval_f1:
+                logger.add_scalar("Val/f1", val_f1, epoch)
             logger.add_figure("results", figure, epoch)
             print()
 
@@ -442,6 +467,13 @@ if __name__ == "__main__":
         "--one_hot",
         type=str2bool,
         help="for dataset labels, True for one-hot type, False for scalar",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--eval_f1",
+        type=str2bool,
+        help="use f1 to evaluate model",
         default=False,
     )
 
