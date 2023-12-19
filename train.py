@@ -171,7 +171,7 @@ def train(data_dir, model_dir, args):
 
     # -- loss & metric
     criterion = create_criterion(
-        args.criterion, classes=dataset.num_classes
+        args.criterion,  # classes=dataset.num_classes
     )  # default: cross_entropy
     opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
 
@@ -294,55 +294,62 @@ def train(data_dir, model_dir, args):
                         )
                         val_f1_items.append(f1_item)
 
-                loss_item = criterion(outs, labels).item()
+                    loss_item = criterion(outs, labels).item()
 
-                if args.one_hot:
-                    if iscutmix:
-                        _, pred = outs.topk(2, 1, True, True)
-                        _, topklabels = labels.topk(2, 1, True, True)
-                        correct = pred.eq(topklabels)
-
-                        acc_item = correct.all(dim=1).sum().item()
-
-                    else:
-                        acc_item = (
-                            (torch.argmax(outs, dim=-1) == torch.argmax(labels, dim=-1))
-                            .sum()
-                            .item()
-                        )
-
-                else:
-                    if outs.dim() != 1:
-                        outs = torch.argmax(outs, dim=-1)
-                    acc_item = (labels == outs).sum().item()
-
-                val_loss_items.append(loss_item)
-                val_acc_items.append(acc_item)
-
-                if figure is None:
-                    inputs_np = (
-                        torch.clone(inputs).detach().cpu().permute(0, 2, 3, 1).numpy()
-                    )
-                    inputs_np = dataset_module.denormalize_image(
-                        inputs_np, dataset.mean, dataset.std
-                    )
                     if args.one_hot:
-                        figure = grid_image(
-                            inputs_np,
-                            labels,
-                            outs,
-                            n=16,
-                            shuffle=args.dataset != "MaskSplitByProfileDataset",
-                            iscutmix=iscutmix,
-                        )
+                        if iscutmix:
+                            _, pred = outs.topk(2, 1, True, True)
+                            _, topklabels = labels.topk(2, 1, True, True)
+                            correct = pred.eq(topklabels)
+
+                            acc_item = correct.all(dim=1).sum().item()
+
+                        else:
+                            acc_item = (
+                                (
+                                    torch.argmax(outs, dim=-1)
+                                    == torch.argmax(labels, dim=-1)
+                                )
+                                .sum()
+                                .item()
+                            )
+
                     else:
-                        figure = grid_image(
-                            inputs_np,
-                            labels,
-                            outs,
-                            n=16,
-                            shuffle=args.dataset != "MaskSplitByProfileDataset",
+                        if outs.dim() != 1:
+                            outs = torch.argmax(outs, dim=-1)
+                        acc_item = (labels == outs).sum().item()
+
+                    val_loss_items.append(loss_item)
+                    val_acc_items.append(acc_item)
+
+                    if figure is None:
+                        inputs_np = (
+                            torch.clone(inputs)
+                            .detach()
+                            .cpu()
+                            .permute(0, 2, 3, 1)
+                            .numpy()
                         )
+                        inputs_np = dataset_module.denormalize_image(
+                            inputs_np, dataset.mean, dataset.std
+                        )
+                        if args.one_hot:
+                            figure = grid_image(
+                                inputs_np,
+                                labels,
+                                outs,
+                                n=16,
+                                shuffle=args.dataset != "MaskSplitByProfileDataset",
+                                iscutmix=iscutmix,
+                            )
+                        else:
+                            figure = grid_image(
+                                inputs_np,
+                                labels,
+                                outs,
+                                n=16,
+                                shuffle=args.dataset != "MaskSplitByProfileDataset",
+                            )
 
                 val_loss = np.sum(val_loss_items) / len(val_loader)
                 val_acc = np.sum(val_acc_items) / len(val_set)
@@ -389,7 +396,7 @@ def train(data_dir, model_dir, args):
 
                 logger.add_figure("results", figure, epoch)
                 print()
-    torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
+        torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
 
 
 def str2bool(v):

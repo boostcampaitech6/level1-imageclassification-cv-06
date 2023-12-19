@@ -1259,7 +1259,7 @@ class CutMixAgeModelDataset(Dataset):
         val_ratio=0.2,
         cutmix_prob=0.49,
         one_hot=True,
-        use_skewed=True,
+        use_skewed=False,
         skew_prob=0.6,
     ):
         self.data_dir = data_dir
