@@ -187,3 +187,6 @@ train_gender.sh
 train_mask.sh
 output.csv
 *.pth
+
+# Ignore .sh files
+*.sh

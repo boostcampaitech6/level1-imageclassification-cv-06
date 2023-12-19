@@ -17,6 +17,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from dataset import MaskBaseDataset
 from loss import create_criterion
+import torch.nn.functional as F
 
 from sklearn.metrics import f1_score
 
@@ -36,7 +37,7 @@ def get_lr(optimizer):
         return param_group["lr"]
 
 
-def grid_image(np_images, gts, preds, n=16, shuffle=False):
+def grid_image(np_images, gts, preds, n=16, shuffle=False, iscutmix=False):
     batch_size = np_images.shape[0]
     assert n <= batch_size
 
@@ -50,19 +51,31 @@ def grid_image(np_images, gts, preds, n=16, shuffle=False):
     n_grid = int(np.ceil(n**0.5))
     tasks = ["mask", "gender", "age"]
     for idx, choice in enumerate(choices):
-        gt = gts[choice].item()
-        pred = preds[choice].item()
-        image = np_images[choice]
-        gt_decoded_labels = MaskBaseDataset.decode_multi_class(gt)
-        pred_decoded_labels = MaskBaseDataset.decode_multi_class(pred)
-        title = "\n".join(
-            [
-                f"{task} - gt: {gt_label}, pred: {pred_label}"
-                for gt_label, pred_label, task in zip(
-                    gt_decoded_labels, pred_decoded_labels, tasks
-                )
-            ]
-        )
+        if args.one_hot:
+            if iscutmix:
+                _, gt = gts[choice].topk(2, 0, True, True)
+                _, pred = preds[choice].topk(2, 0, True, True)
+                gt = gt.tolist()
+                pred = pred.tolist()
+            else:
+                gt = gts[choice]
+                pred = preds[choice]
+            image = np_images[choice]
+            title = "\n".join([f"gt: {gt}, pred: {pred}"])
+        else:
+            gt = gts[choice].item()
+            pred = preds[choice].item()
+            image = np_images[choice]
+            gt_decoded_labels = MaskBaseDataset.decode_multi_class(gt)
+            pred_decoded_labels = MaskBaseDataset.decode_multi_class(pred)
+            title = "\n".join(
+                [
+                    f"{task} - gt: {gt_label}, pred: {pred_label}"
+                    for gt_label, pred_label, task in zip(
+                        gt_decoded_labels, pred_decoded_labels, tasks
+                    )
+                ]
+            )
 
         plt.subplot(n_grid, n_grid, idx + 1, title=title)
         plt.xticks([])
@@ -128,9 +141,8 @@ def train(data_dir, model_dir, args):
     dataset_module = getattr(
         import_module("dataset"), args.dataset
     )  # default: MaskBaseDataset
-    dataset = dataset_module(
-        data_dir=data_dir,
-    )
+    dataset = dataset_module(data_dir=data_dir, one_hot=args.one_hot)
+    iscutmix = "cutmix" in args.dataset.lower()
     num_classes = dataset.num_classes  # 18
 
     # -- augmentation
@@ -158,7 +170,9 @@ def train(data_dir, model_dir, args):
     model = torch.nn.DataParallel(model)
 
     # -- loss & metric
-    criterion = create_criterion(args.criterion)  # default: cross_entropy
+    criterion = create_criterion(
+        args.criterion, classes=dataset.num_classes
+    )  # default: cross_entropy
     opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
 
     optimizer = opt_module(
@@ -166,7 +180,7 @@ def train(data_dir, model_dir, args):
         lr=args.lr,
         weight_decay=5e-4,
     )
-    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.1)
 
     # -- logging
     logger = SummaryWriter(log_dir=save_dir)
@@ -175,7 +189,7 @@ def train(data_dir, model_dir, args):
 
     best_val_acc = 0
     best_val_loss = np.inf
-
+    best_val_f1 = 0
     iter = 1
     for train_set, val_set in splits:
         ### 학습 매 fold마다 독립적으로 진행되도록
@@ -193,6 +207,7 @@ def train(data_dir, model_dir, args):
         train_loader, val_loader = run(args, train_set, val_set)
         print(str(iter) + "번째 fold")
         iter += 1
+
         for epoch in range(args.epochs):
             # train loop
             model.train()
@@ -208,21 +223,39 @@ def train(data_dir, model_dir, args):
                 optimizer.zero_grad()
 
                 outs = model(inputs)
-                preds = torch.argmax(outs, dim=-1)
                 loss = criterion(outs, labels)
 
                 loss.backward()
                 optimizer.step()
 
                 loss_value += loss.item()
-                matches += (preds == labels).sum().item()
+
+                if args.one_hot:
+                    if iscutmix:
+                        _, pred = outs.topk(2, 1, True, True)
+                        _, labels = labels.topk(2, 1, True, True)
+                        correct = pred.eq(labels)
+
+                        matches += correct.all(dim=1).sum().item()
+                    else:
+                        matches += (
+                            (torch.argmax(outs, dim=-1) == torch.argmax(labels, dim=-1))
+                            .sum()
+                            .item()
+                        )
+                else:
+                    if outs.dim() != 1:
+                        outs = torch.argmax(outs, dim=-1)
+                    matches += (outs == labels).sum().item()
+
                 if (idx + 1) % args.log_interval == 0:
                     train_loss = loss_value / args.log_interval
                     train_acc = matches / args.batch_size / args.log_interval
                     current_lr = get_lr(optimizer)
                     print(
                         f"Epoch[{epoch + 1}/{args.epochs}]({idx + 1}/{len(train_loader)}) || "
-                        f"training loss {train_loss:4.4} || training accuracy {train_acc:4.2%} || lr {current_lr}"
+                        f"training loss {train_loss:4.4f} || training accuracy {train_acc:4.2%} || lr {current_lr}",
+                        end="\r",
                     )
                     logger.add_scalar(
                         "Train/loss", train_loss, epoch * len(train_loader) + idx
@@ -235,6 +268,7 @@ def train(data_dir, model_dir, args):
                     matches = 0
 
             scheduler.step()
+            print()
 
             # val loop
             with torch.no_grad():
@@ -251,34 +285,61 @@ def train(data_dir, model_dir, args):
                     labels = labels.to(device)
 
                     outs = model(inputs)
-                    preds = torch.argmax(outs, dim=-1)
 
-                    # F1 점수 계산
-                    f1_item = f1_score(
-                        labels.cpu().numpy(), preds.cpu().numpy(), average="macro"
+                    if args.eval_f1:
+                        preds = torch.argmax(outs, dim=-1)
+                        # F1 점수 계산
+                        f1_item = f1_score(
+                            labels.cpu().numpy(), preds.cpu().numpy(), average="macro"
+                        )
+                        val_f1_items.append(f1_item)
+
+                loss_item = criterion(outs, labels).item()
+
+                if args.one_hot:
+                    if iscutmix:
+                        _, pred = outs.topk(2, 1, True, True)
+                        _, topklabels = labels.topk(2, 1, True, True)
+                        correct = pred.eq(topklabels)
+
+                        acc_item = correct.all(dim=1).sum().item()
+
+                    else:
+                        acc_item = (
+                            (torch.argmax(outs, dim=-1) == torch.argmax(labels, dim=-1))
+                            .sum()
+                            .item()
+                        )
+
+                else:
+                    if outs.dim() != 1:
+                        outs = torch.argmax(outs, dim=-1)
+                    acc_item = (labels == outs).sum().item()
+
+                val_loss_items.append(loss_item)
+                val_acc_items.append(acc_item)
+
+                if figure is None:
+                    inputs_np = (
+                        torch.clone(inputs).detach().cpu().permute(0, 2, 3, 1).numpy()
                     )
-                    val_f1_items.append(f1_item)
-
-                    loss_item = criterion(outs, labels).item()
-                    acc_item = (labels == preds).sum().item()
-                    val_loss_items.append(loss_item)
-                    val_acc_items.append(acc_item)
-
-                    if figure is None:
-                        inputs_np = (
-                            torch.clone(inputs)
-                            .detach()
-                            .cpu()
-                            .permute(0, 2, 3, 1)
-                            .numpy()
-                        )
-                        inputs_np = dataset_module.denormalize_image(
-                            inputs_np, dataset.mean, dataset.std
-                        )
+                    inputs_np = dataset_module.denormalize_image(
+                        inputs_np, dataset.mean, dataset.std
+                    )
+                    if args.one_hot:
                         figure = grid_image(
                             inputs_np,
                             labels,
-                            preds,
+                            outs,
+                            n=16,
+                            shuffle=args.dataset != "MaskSplitByProfileDataset",
+                            iscutmix=iscutmix,
+                        )
+                    else:
+                        figure = grid_image(
+                            inputs_np,
+                            labels,
+                            outs,
                             n=16,
                             shuffle=args.dataset != "MaskSplitByProfileDataset",
                         )
@@ -287,7 +348,8 @@ def train(data_dir, model_dir, args):
                 val_acc = np.sum(val_acc_items) / len(val_set)
                 best_val_loss = min(best_val_loss, val_loss)
 
-                val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
+                if args.eval_f1:
+                    val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
 
                 if val_acc > best_val_acc or (
                     val_acc == best_val_acc and val_loss < best_val_loss
@@ -302,20 +364,50 @@ def train(data_dir, model_dir, args):
                     best_model_weights = model.module.state_dict()
                     best_val_loss = val_loss
                     best_val_acc = val_acc
+
+                    if args.eval_f1:
+                        best_val_f1 = val_f1
+
                 torch.save(
                     model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth"
                 )
+
+                print(f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || ", end="")
+
+                if args.eval_f1:
+                    print(f"[Val] F1 Score: {val_f1:4.2} || ", end="")
+
                 print(
-                    f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
                     f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2} \n"
-                    f"[Val] F1 Score: {val_f1:4.2}"
                 )
+
                 logger.add_scalar("Val/loss", val_loss, epoch)
                 logger.add_scalar("Val/accuracy", val_acc, epoch)
-                logger.add_scalar("Val/f1", val_f1, epoch)
+
+                if args.eval_f1:
+                    logger.add_scalar("Val/f1", val_f1, epoch)
+
                 logger.add_figure("results", figure, epoch)
                 print()
     torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
+
+
+def str2bool(v):
+    """
+        argument로 True, False 값을 받아오기위한 함수
+
+    Args:
+        v (str): true, false와 같은 문자열
+
+    Returns:
+        bool : True or False
+    """
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 if __name__ == "__main__":
@@ -387,6 +479,12 @@ if __name__ == "__main__":
         help="learning rate scheduler deacy step (default: 20)",
     )
     parser.add_argument(
+        "--lr_decay_gamma",
+        type=float,
+        default=0.5,
+        help="gamma value scheduler deacy step (default: 0.5)",
+    )
+    parser.add_argument(
         "--log_interval",
         type=int,
         default=20,
@@ -427,6 +525,20 @@ if __name__ == "__main__":
         type=int,
         help="0: No K-fold, 1: K-fold, 2: Stratified K-fold",
         default=0,
+    )
+
+    parser.add_argument(
+        "--one_hot",
+        type=str2bool,
+        help="for dataset labels, True for one-hot type, False for scalar",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--eval_f1",
+        type=str2bool,
+        help="use f1 to evaluate model",
+        default=False,
     )
 
     args = parser.parse_args()
