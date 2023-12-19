@@ -88,11 +88,11 @@ class Resnet34(nn.Module):
     
 
 class MaskCustomModel(nn.Module):
-    def __init__(self, download = False):
+    def __init__(self, num_classes, download = False):
         super().__init__()
 
-        self.model_wear = Resnet34(num_classes=2)
-        self.model_correct = Resnet34(num_classes=2)
+        self.model_wear = Resnet34(2)
+        self.model_correct = Resnet34(2)
 
         if download:
             use_cuda = torch.cuda.is_available()

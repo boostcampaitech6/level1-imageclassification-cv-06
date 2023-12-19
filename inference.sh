@@ -2,7 +2,7 @@ cat best_model/mask_model_best.tar* | tar xvf - -C ./best_model/ \
 && \
 python inference.py \
 --data_dir /data/ephemeral/home/data/eval \
---model_dir /data/ephemeral/home/project/repo/level1-imageclassification-cv-06/best_model \
+--model_dir /data/ephemeral/home/level1-imageclassification-cv-06/best_model \
 --output_dir ./ \
 --age_model MyModel \
 --gender_model EfficientNetb0Custom \
