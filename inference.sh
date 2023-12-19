@@ -3,7 +3,7 @@ python inference.py \
 --model_dir /data/ephemeral/home/project/repo/level1-imageclassification-cv-06/best_model \
 --output_dir ./ \
 --age_model MyModel \
---gender_model MyModel \
+--gender_model EfficientNetb0Custom \
 --mask_model MyModel \
 --age_augmentation BaseAugmentation \
 --gender_augmentation BaseAugmentation \
