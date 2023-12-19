@@ -15,9 +15,7 @@ from torchvision.transforms import (
     Normalize,
     Compose,
     CenterCrop,
-    ColorJitter,
-    AutoAugmentPolicy,
-    AutoAugment
+    ColorJitter
 )
 
 
@@ -107,13 +105,12 @@ class CustomAugmentation:
     def __init__(self, agrs, dataset):
         self.transform = Compose(
             [
-                # CenterCrop((320, 256)),
+                CenterCrop((320, 256)),
                 Resize(agrs.resize, Image.BILINEAR),
-                AutoAugment(policy=AutoAugmentPolicy()),
-                # ColorJitter(0.1, 0.1, 0.1, 0.1),
+                ColorJitter(0.1, 0.1, 0.1, 0.1),
                 ToTensor(),
                 Normalize(mean=dataset.mean, std=dataset.std),
-                # AddGaussianNoise(),
+                AddGaussianNoise(),
             ]
         )
 
@@ -737,6 +734,7 @@ class GenderModelDataset(Dataset):
         assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
 
         image = self.read_image(index)
+        image = image.convert('RGB')
         gender_label = self.get_gender_label(index)
         image_transform = self.transform(image)
         return image_transform, gender_label
