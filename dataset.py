@@ -597,6 +597,20 @@ class AgeModelDataset(Dataset):
         "mask5": MaskLabels.MASK,
         "incorrect_mask": MaskLabels.INCORRECT,
         "normal": MaskLabels.NORMAL,
+        "mask1_horizontal_fliped": MaskLabels.MASK,
+        "mask2_horizontal_fliped": MaskLabels.MASK,
+        "mask3_horizontal_fliped": MaskLabels.MASK,
+        "mask4_horizontal_fliped": MaskLabels.MASK,
+        "mask5_horizontal_fliped": MaskLabels.MASK,
+        "incorrect_mask_horizontal_fliped": MaskLabels.INCORRECT,
+        "normal_horizontal_fliped": MaskLabels.NORMAL,
+        "mask1_sharpened": MaskLabels.MASK,
+        "mask2_sharpened": MaskLabels.MASK,
+        "mask3_sharpened": MaskLabels.MASK,
+        "mask4_sharpened": MaskLabels.MASK,
+        "mask5_sharpened": MaskLabels.MASK,
+        "incorrect_mask_sharpened": MaskLabels.INCORRECT,
+        "normal_sharpened": MaskLabels.NORMAL,
     }
 
     def __init__(

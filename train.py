@@ -289,14 +289,18 @@ def train(data_dir, model_dir, args):
 
                 val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
 
-                if val_acc > best_val_acc:
-                    print(
-                        f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
-                    )
-                    torch.save(
-                        model.module.state_dict(),
-                        f"{save_dir}/{args.model_type}_best.pth",
-                    )
+                if val_acc > best_val_acc or (
+                    val_acc == best_val_acc and val_loss < best_val_loss
+                ):
+                    # print(
+                    #     f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
+                    # )
+                    # torch.save(
+                    #     model.module.state_dict(),
+                    #     f"{save_dir}/{args.model_type}_best.pth",
+                    # )
+                    best_model_weights = model.module.state_dict()
+                    best_val_loss = val_loss
                     best_val_acc = val_acc
                 torch.save(
                     model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth"
@@ -311,6 +315,7 @@ def train(data_dir, model_dir, args):
                 logger.add_scalar("Val/f1", val_f1, epoch)
                 logger.add_figure("results", figure, epoch)
                 print()
+    torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
 
 
 if __name__ == "__main__":
