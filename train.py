@@ -247,6 +247,7 @@ def train(data_dir, model_dir, args):
                     if outs.dim() != 1:
                         outs = torch.argmax(outs, dim=-1)
                     matches += (outs == labels).sum().item()
+
                 if (idx + 1) % args.log_interval == 0:
                     train_loss = loss_value / args.log_interval
                     train_acc = matches / args.batch_size / args.log_interval
@@ -268,6 +269,7 @@ def train(data_dir, model_dir, args):
 
             scheduler.step()
             print()
+
             # val loop
             with torch.no_grad():
                 print("Calculating validation results...")
@@ -283,6 +285,7 @@ def train(data_dir, model_dir, args):
                     labels = labels.to(device)
 
                     outs = model(inputs)
+
                     if args.eval_f1:
                         preds = torch.argmax(outs, dim=-1)
                         # F1 점수 계산
@@ -300,6 +303,7 @@ def train(data_dir, model_dir, args):
                         correct = pred.eq(topklabels)
 
                         acc_item = correct.all(dim=1).sum().item()
+
                     else:
                         acc_item = (
                             (torch.argmax(outs, dim=-1) == torch.argmax(labels, dim=-1))
@@ -311,6 +315,7 @@ def train(data_dir, model_dir, args):
                     if outs.dim() != 1:
                         outs = torch.argmax(outs, dim=-1)
                     acc_item = (labels == outs).sum().item()
+
                 val_loss_items.append(loss_item)
                 val_acc_items.append(acc_item)
 
@@ -350,29 +355,38 @@ def train(data_dir, model_dir, args):
                     print(
                         f"New best model for val accuracy : {val_acc:4.2%}. saving the best model.."
                     )
+
                     if args.eval_f1:
                         print(f"val f1 : {val_f1:.4f}!")
+
                     torch.save(
                         model.module.state_dict(),
                         f"{save_dir}/{args.model_type}_best.pth",
                     )
                     best_val_acc = val_acc
+
                     if args.eval_f1:
                         best_val_f1 = val_f1
+
                 torch.save(
                     model.module.state_dict(), f"{save_dir}/{args.model_type}_last.pth"
                 )
 
                 print(f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || ", end="")
+
                 if args.eval_f1:
                     print(f"[Val] F1 Score: {val_f1:4.2} || ", end="")
+
                 print(
                     f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2} \n"
                 )
+
                 logger.add_scalar("Val/loss", val_loss, epoch)
                 logger.add_scalar("Val/accuracy", val_acc, epoch)
+
                 if args.eval_f1:
                     logger.add_scalar("Val/f1", val_f1, epoch)
+
                 logger.add_figure("results", figure, epoch)
                 print()
 
