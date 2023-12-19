@@ -191,6 +191,7 @@ def train(data_dir, model_dir, args):
     best_val_loss = np.inf
     best_val_f1 = 0
     iter = 1
+
     for train_set, val_set in splits:
         ### 학습 매 fold마다 독립적으로 진행되도록
         model = model_module(num_classes=num_classes).to(device)
@@ -397,6 +398,24 @@ def train(data_dir, model_dir, args):
                 logger.add_figure("results", figure, epoch)
                 print()
         torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
+
+
+def str2bool(v):
+    """
+        argument로 True, False 값을 받아오기위한 함수
+
+    Args:
+        v (str): true, false와 같은 문자열
+
+    Returns:
+        bool : True or False
+    """
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 def str2bool(v):
