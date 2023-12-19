@@ -149,7 +149,6 @@ def inference(data_dir, model_dir, output_dir, args):
         for idx, images in enumerate(mask_loader):
             images = images.to(device)
             pred = mask_model(images)
-            pred = pred.argmax(dim=-1)
             mask_preds.extend(pred.cpu().numpy())
 
         print("Inferencing Complete!")

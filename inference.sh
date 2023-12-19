@@ -4,7 +4,7 @@ python inference.py \
 --output_dir ./ \
 --age_model MyModel \
 --gender_model EfficientNetb0Custom \
---mask_model MyModel \
+--mask_model MaskCustomModel \
 --age_augmentation BaseAugmentation \
 --gender_augmentation BaseAugmentation \
---mask_augmentation BaseAugmentation \
+--mask_augmentation MaskAugmentation \

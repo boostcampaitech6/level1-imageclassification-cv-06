@@ -15,6 +15,8 @@ from torchvision.transforms import (
     Compose,
     CenterCrop,
     ColorJitter,
+    AutoAugment,
+    AutoAugmentPolicy,
 )
 
 # 지원되는 이미지 확장자 리스트
@@ -784,3 +786,25 @@ class GenderModelDataset(Dataset):
         img_cp *= 255.0
         img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
         return img_cp
+    
+
+class MaskAugmentation:
+    def __init__(self, args, dataset):
+        self.transform = Compose(
+            [
+                CenterCrop((450, 240)),
+                AutoAugment(AutoAugmentPolicy.IMAGENET),
+                ToTensor(),
+                # RandomApply([
+                #     RandomHorizontalFlip(),
+                #     RandomRotation(15),
+                #     Normalize(mean=dataset.mean, std=dataset.std),
+                #     Grayscale(3),
+                #     RandomAdjustSharpness(4),
+                #     RandomAutocontrast()
+                # ], p=0.4)
+            ]
+        )
+
+    def __call__(self, image):
+        return self.transform(image)
