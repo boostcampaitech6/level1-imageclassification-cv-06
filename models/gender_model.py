@@ -72,3 +72,82 @@ class MyModel(nn.Module):
         """
         x = self.resnet34(x)
         return x
+
+class ResNet50Model(nn.Module):
+    def __init__(self, num_classes):
+        super(ResNet50Model, self).__init__()
+        
+        # ResNet50 기반의 사전 학습된 모델 불러오기 224 224가 인풋
+        self.base_model = torchvision.models.resnet50(pretrained=True)
+        
+        # ResNet50의 마지막 fc layer를 변경하여 원하는 num_classes로 출력 차원 설정
+        in_features = self.base_model.fc.in_features
+        self.base_model.fc = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        return self.base_model(x)
+    
+class ResNet34Model(nn.Module):
+    def __init__(self, num_classes):
+        super(ResNet34Model, self).__init__()
+        
+        # ResNet34 기반의 사전 학습된 모델 불러오기 224 224가 인풋
+        self.base_model = torchvision.models.resnet34(pretrained=True)
+        
+        # ResNet34의 마지막 fc layer를 변경하여 원하는 num_classes로 출력 차원 설정
+        in_features = self.base_model.fc.in_features
+        self.base_model.fc = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        return self.base_model(x)
+    
+class VGG16Custom(nn.Module):
+    def __init__(self, num_classes):
+        super(VGG16Custom, self).__init__()
+        self.vgg = torchvision.models.vgg16(pretrained=True)
+        num_features = self.vgg.classifier[6].in_features
+        self.vgg.classifier[6] = nn.Linear(num_features, num_classes)
+
+    def forward(self, x):
+        x = self.vgg(x)
+        return x
+
+class InceptionV3Custom(nn.Module):
+    def __init__(self, num_classes):
+        super(InceptionV3Custom, self).__init__()
+        self.inception = torchvision.models.inception_v3(pretrained=True)
+        num_features = self.inception.fc.in_features
+        self.inception.fc = nn.Linear(num_features, num_classes)
+
+    def forward(self, x):
+        outputs = self.inception(x)
+        if isinstance(outputs, tuple):
+            return outputs[0]
+        return outputs
+    
+class MobileNetV2Custom(nn.Module):
+    def __init__(self, num_classes):
+        super(MobileNetV2Custom, self).__init__()
+        self.mobilenet = torchvision.models.mobilenet_v2(pretrained=True)
+        num_features = self.mobilenet.classifier[1].in_features
+        self.mobilenet.classifier[1] = nn.Linear(num_features, num_classes)
+
+    def forward(self, x):
+        x = self.mobilenet(x)
+        return x
+
+class EfficientNetb0Custom(nn.Module):
+    # input size 224 224
+    def __init__(self, num_classes):
+        super(EfficientNetb0Custom,self).__init__()
+        self.efficientnet = timm.create_model('efficientnet_b0', pretrained=True)
+        in_features = self.efficientnet.classifier.in_features
+        new_fc_layer = nn.Linear(in_features, num_classes)
+
+        # 모델의 마지막 FC 레이어를 새로운 FC 레이어로 교체
+        self.efficientnet.classifier = new_fc_layer
+    
+    def forward(self, x):
+        x = self.efficientnet(x)
+        return x
+
