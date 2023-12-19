@@ -68,6 +68,41 @@ python train.py \
 cd ${project}
 ./train_${task}.sh
 ```
+
 #### 추론
 
-(아직 추론 기능은 논의가 필요하여 나중에 개발 예정입니다!!)
+Task 별 best_model 적용 방법
+
+1. 가장 좋은 것 같은 모델을 선택한다.
+2. 해당 모델의 저장된 학습 결과 {task}_best_model.pth 파일을 best_model/ 하위로 옮겨준다. 이때 덮어쓰기 여부를 묻는다면 덮어쓴다.
+3. models/{task}_model.py 파일에 자신이 (2)에서 사용했던 모델의 Class가 정의되어 있는지 확인한다. (이 부분을 수행하지 않으면 추후 Inference 시 문제가 발생)
+4. inference.sh 파일을 실행하기 전, argument를 세팅한다.
+
+
+예시
+```
+python inference.py \
+
+(추론 데이터셋 경로, eval 폴더를 기준으로 설정)
+--data_dir /data/ephemeral/home/data/eval \
+
+(best_model 폴더 경로, 프로젝트 내 best_model 폴더를 기준으로 설정)
+--model_dir /data/ephemeral/home/project/repo/level1-imageclassification-cv-06/best_model \
+
+(submission 파일이 나오는 최종 경로)
+--output_dir ./ \ 
+
+(models/age_model.py 에 정의되어 있는 Class 이름. 반드시 best_model/age_best_model.pth와 동일한 모델이 선택되어야함)
+--age_model MyModel \ 
+
+(models/gender_model.py 에 정의되어 있는 Class 이름. 반드시 best_model/gender_best_model.pth와 동일한 모델이 선택되어야함)
+--gender_model MyModel \
+
+(models/mask_model.py 에 정의되어 있는 Class 이름. 반드시 best_model/mask_best_model.pth와 동일한 모델이 선택되어야함)
+--mask_model MyModel \
+
+(각 모델별 사용하는 Data augmentation을 설정. 설정된 Augmentation이 dataset.py에 반드시 정의되어 있어야 함)
+--age_augmentation BaseAugmentation \
+--gender_augmentation BaseAugmentation \
+--mask_augmentation BaseAugmentation \
+```
