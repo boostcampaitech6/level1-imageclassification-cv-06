@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+import timm
 
 
 class BaseModel(nn.Module):
@@ -71,4 +72,20 @@ class MyModel(nn.Module):
         2. 결과로 나온 output 을 return 해주세요
         """
         x = self.resnet34(x)
+        return x
+
+
+class EfficientNetb0Custom(nn.Module):
+    # input size 224 224
+    def __init__(self, num_classes):
+        super(EfficientNetb0Custom,self).__init__()
+        self.efficientnet = timm.create_model('efficientnet_b0', pretrained=True)
+        in_features = self.efficientnet.classifier.in_features
+        new_fc_layer = nn.Linear(in_features, num_classes)
+
+        # 모델의 마지막 FC 레이어를 새로운 FC 레이어로 교체
+        self.efficientnet.classifier = new_fc_layer
+    
+    def forward(self, x):
+        x = self.efficientnet(x)
         return x
