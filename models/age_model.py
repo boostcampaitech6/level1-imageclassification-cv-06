@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
@@ -72,3 +73,14 @@ class MyModel(nn.Module):
         """
         x = self.resnet34(x)
         return x
+
+class SingleResNet50(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.resnet50 = models.resnet50(pretrained=True)
+        in_features = self.resnet50.fc.in_features
+        self.resnet50.fc = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        x = self.resnet50(x)
+        return torch.softmax(x, dim=-1)
