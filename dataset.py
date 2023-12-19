@@ -6,7 +6,8 @@ from typing import Tuple, List
 
 import numpy as np
 import torch
-from PIL import Image
+import torch.nn.functional as F
+from PIL import Image, ImageEnhance
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision.transforms import (
     Resize,
@@ -16,6 +17,7 @@ from torchvision.transforms import (
     CenterCrop,
     ColorJitter,
 )
+from copy import copy
 from sklearn.model_selection import StratifiedKFold
 import pandas as pd
 from typing import Generator
@@ -59,13 +61,55 @@ class BaseAugmentation:
     def __init__(self, args, dataset):
         """
         Args:
-            resize (tuple): 이미지의 리사이즈 대상 크지
-            mean (tuple): Normalize 변환을 위한 평균 값
-            std (tuple): Normalize 변환을 위한 표준 값
+            args (arguments): CLI로 받아온 argument.
+            dataset (Dataset) :
         """
         self.transform = Compose(
             [
                 Resize(args.resize, Image.BILINEAR),
+                ToTensor(),
+                Normalize(mean=dataset.mean, std=dataset.std),
+            ]
+        )
+
+    def __call__(self, image):
+        """
+        이미지에 저장된 transform 적용
+
+        Args:
+            Image (PIL.Image): Augumentation을 적용할 이미지
+
+        Returns:
+            Tensor: Argumentation이 적용된 이미지
+        """
+        return self.transform(image)
+
+
+class CustomSharpenTransform:
+    """
+    이미지를 날카롭게 만드는 Transform
+    """
+
+    def __init__(self, factor=2.5):
+        self.factor = factor
+
+    def __call__(self, img):
+        enhancer = ImageEnhance.Sharpness(img)
+        img = enhancer.enhance(self.factor)
+        return img
+
+
+class SharpenAugmentation:
+    """
+    Image를 날카롭게 만드는 Augmentation.
+    기본적인 Normalize도 포함되어 있다.
+    """
+
+    def __init__(self, args, dataset):
+        self.transform = Compose(
+            [
+                Resize(args.resize, Image.BILINEAR),
+                CustomSharpenTransform(),
                 ToTensor(),
                 Normalize(mean=dataset.mean, std=dataset.std),
             ]
@@ -117,6 +161,64 @@ class CustomAugmentation:
 
     def __call__(self, image):
         return self.transform(image)
+
+
+class CutMixVerticalAugmentation:
+    def __init__(self, percentage=0.5):
+        """
+        origin_image가 얼마나 많은 비율을 갖고 있을지를 정하는 percentage.
+        percentage가 0.5면 세로로 절반, 0.6이면 오리지널이 60%, 다른 랜덤한 사진이 40%를 갖는다.
+        """
+        self.percentage = percentage
+
+    def __call__(self, origin_image, origin_label, cutmix_image, cutmix_label):
+        return self.cutmix(origin_image, origin_label, cutmix_image, cutmix_label)
+
+    def cutmix(self, origin_image, origin_label, cutmix_image, cutmix_label):
+        """_summary_
+            cutmix를 적용하는 함수.
+            origin_image가 self.percentage 만큼, random하게 선택된 cutmix_image가 1-self.percentage만큼
+            합성되는 이미지를 반환한다.
+        Args:
+            origin_image (PIL.JpegImagePlugin.JpegImageFile): PIL.Image로 불러온 이미지
+            origin_label (torch.Tensor): origin_image에 맞는 one-hot vector label
+            cutmix_image (PIL.JpegImagePlugin.JpegImageFile): PIL.Image로 불러온 이미지
+            cutmix_label (torch.Tensor): cutmix_image에 맞는 one-hot vector label
+
+        Returns:
+            mixed_image (PIL.Image.Image): mix된 이미지
+            mixed_label (torch.Tensor): mix된 이미지의 mix된 label
+        """
+        mixed_image = copy(origin_image)
+        width, height = mixed_image.size
+
+        bbx1, bby1, bbx2, bby2 = self.vertical_bbox(width, height)
+
+        cutmix_image = cutmix_image.crop((bbx1, bby1, bbx2, bby2))
+
+        mixed_image.paste(cutmix_image, (bbx1, bby1))
+        mixed_label = origin_label * self.percentage + cutmix_label * (
+            1 - self.percentage
+        )
+        return mixed_image, mixed_label
+
+    def vertical_bbox(self, width, height):
+        # Generate random bounding box coordinates for CutMix
+        cut_w = int(width * self.percentage)
+        cut_h = int(height)
+
+        # Randomly choose the top-left corner of the bounding box
+        cx = 0
+        cy = 0
+
+        # Calculate the bounding box coordinates
+        # 그저 수직으로 자르는것이기 때문에, 다음과 같이 구성했다.
+        bbx1 = max(0, cx + cut_w)
+        bby1 = max(0, cy - cut_h)
+        bbx2 = width
+        bby2 = height
+
+        return bbx1, bby1, bbx2, bby2
 
 
 class MaskLabels(int, Enum):
@@ -171,7 +273,12 @@ class AgeLabels(int, Enum):
 
 
 class MaskBaseDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """마스크 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~18 중 1))
+    """
 
     num_classes = 3 * 2 * 3
 
@@ -429,7 +536,14 @@ class TestDataset(Dataset):
 
 
 class MaskModelDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """
+    마스크 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~3 중 1))
+
+    """
 
     num_classes = 3
 
@@ -452,12 +566,14 @@ class MaskModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
+        one_hot=False,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
+        self.one_hot = one_hot
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -505,6 +621,10 @@ class MaskModelDataset(Dataset):
 
     def get_mask_label(self, index) -> MaskLabels:
         """인덱스에 해당하는 마스크 라벨을 반환하는 메서드"""
+        if self.one_hot:
+            return F.one_hot(
+                torch.tensor(self.mask_labels[index] * 1), self.num_classes
+            ).float()
         return self.mask_labels[index]
 
     def read_image(self, index):
@@ -532,8 +652,8 @@ class MaskModelDataset(Dataset):
         for train_index, val_index in kf.split(self):
             train_set = Subset(self, train_index)
             val_set = Subset(self, val_index)
-            label_train = np.array(self.age_labels)[train_index]
-            label_test = np.array(self.age_labels)[val_index]
+            label_train = np.array(self.mask_labels)[train_index]
+            label_test = np.array(self.mask_labels)[val_index]
             print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
             print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
             yield train_set, val_set
@@ -544,11 +664,11 @@ class MaskModelDataset(Dataset):
         StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
         """
         skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
-        for train_index, val_index in skf.split(range(len(self)), self.age_labels):
+        for train_index, val_index in skf.split(range(len(self)), self.mask_labels):
             train_set = Subset(self, train_index)
             val_set = Subset(self, val_index)
-            label_train = np.array(self.age_labels)[train_index]
-            label_test = np.array(self.age_labels)[val_index]
+            label_train = np.array(self.mask_labels)[train_index]
+            label_test = np.array(self.mask_labels)[val_index]
             print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
             print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
             yield train_set, val_set
@@ -582,7 +702,14 @@ class MaskModelDataset(Dataset):
 
 
 class AgeModelDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """
+    나이 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~3 중 1))
+
+    """
 
     num_classes = 3
 
@@ -605,12 +732,14 @@ class AgeModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
+        one_hot=False,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
+        self.one_hot = one_hot
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -658,6 +787,10 @@ class AgeModelDataset(Dataset):
 
     def get_age_label(self, index) -> AgeLabels:
         """인덱스에 해당하는 나이 라벨을 반환하는 메서드"""
+        if self.one_hot:
+            return F.one_hot(
+                torch.tensor(self.age_labels[index] * 1), self.num_classes
+            ).float()
         return self.age_labels[index]
 
     def read_image(self, index):
@@ -735,7 +868,13 @@ class AgeModelDataset(Dataset):
 
 
 class GenderModelDataset(Dataset):
-    """마스크 데이터셋의 기본 클래스"""
+    """
+    성별 데이터셋의 기본 클래스
+
+    image:  PIL.Image
+    labels: Long
+    ex) (PIL.Image 타입의 어떤 이미지), (해당 이미지에 맞는 class num (0~3 중 1))
+    """
 
     num_classes = 2
 
@@ -757,12 +896,14 @@ class GenderModelDataset(Dataset):
         mean=(0.548, 0.504, 0.479),
         std=(0.237, 0.247, 0.246),
         val_ratio=0.2,
+        one_hot=False,
     ):
         self.data_dir = data_dir
         self.val_ratio = val_ratio
         self.mean = mean
         self.std = std
         self.transform = None
+        self.one_hot = one_hot
         self.setup()  # 데이터셋을 설정
         self.calc_statistics()
 
@@ -811,6 +952,10 @@ class GenderModelDataset(Dataset):
 
     def get_gender_label(self, index) -> GenderLabels:
         """인덱스에 해당하는 성별 라벨을 반환하는 메서드"""
+        if self.one_hot:
+            return F.one_hot(
+                torch.tensor(self.gender_labels[index] * 1), self.num_classes
+            ).float()
         return self.gender_labels[index]
 
     def read_image(self, index):
@@ -827,6 +972,380 @@ class GenderModelDataset(Dataset):
         n_train = len(self) - n_val
         train_set, val_set = random_split(self, [n_train, n_val])
 
+        return train_set, val_set
+
+    def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 일반 K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        KFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        kf = KFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in kf.split(self):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.gender_labels)[train_index]
+            label_test = np.array(self.gender_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def split_dataset3(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 Stratified K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in skf.split(range(len(self)), self.gender_labels):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.gender_labels)[train_index]
+            label_test = np.array(self.gender_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def calc_statistics(self):
+        """데이터셋의 통계치를 계산하는 메서드"""
+        has_statistics = self.mean is not None and self.std is not None
+        if not has_statistics:
+            print(
+                "[Warning] Calculating statistics... It can take a long time depending on your CPU machine"
+            )
+            sums = []
+            squared = []
+            for image_path in self.image_paths[:3000]:
+                image = np.array(Image.open(image_path)).astype(np.int32)
+                sums.append(image.mean(axis=(0, 1)))
+                squared.append((image**2).mean(axis=(0, 1)))
+
+            self.mean = np.mean(sums, axis=0) / 255
+            self.std = (np.mean(squared, axis=0) - self.mean**2) ** 0.5 / 255
+
+    @staticmethod
+    def denormalize_image(image, mean, std):
+        """정규화된 이미지를 원래대로 되돌리는 메서드"""
+        img_cp = image.copy()
+        img_cp *= std
+        img_cp += mean
+        img_cp *= 255.0
+        img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
+        return img_cp
+
+
+class CutMixMaskModelDataset(Dataset):
+    """MaskModel에 사용하기 위한 CutMix를 적용하는 데이터셋 클래스
+
+    Args:
+        data_dir (str): 데이터 위치
+        mean
+        std
+        val_ratio
+        cutmix_augmentation (CutMixVerticalAugmentation): CutMix 수행하는 Class
+        cutmix_prob (float): CutMix를 수행 할 확률
+
+    """
+
+    num_classes = 3
+
+    image_paths = []
+    mask_labels = []
+
+    _file_names = {
+        "mask1": MaskLabels.MASK,
+        "mask2": MaskLabels.MASK,
+        "mask3": MaskLabels.MASK,
+        "mask4": MaskLabels.MASK,
+        "mask5": MaskLabels.MASK,
+        "incorrect_mask": MaskLabels.INCORRECT,
+        "normal": MaskLabels.NORMAL,
+    }
+
+    def __init__(
+        self,
+        data_dir,
+        mean=(0.548, 0.504, 0.479),
+        std=(0.237, 0.247, 0.246),
+        val_ratio=0.2,
+        cutmix_prob=0.49,
+        one_hot=True,
+    ):
+        self.data_dir = data_dir
+        self.val_ratio = val_ratio
+        self.mean = mean
+        self.std = std
+        self.transform = None
+        self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
+        self.setup()  # 데이터셋을 설정
+        self.calc_statistics()
+
+    def setup(self):
+        """데이터 디렉토리로부터 이미지 경로와 라벨을 설정하는 메서드"""
+        profiles = os.listdir(self.data_dir)
+        for profile in profiles:
+            if profile.startswith("."):  # "." 로 시작하는 파일은 무시합니다
+                continue
+
+            img_folder = os.path.join(self.data_dir, profile)
+            for file_name in os.listdir(img_folder):
+                _file_name, ext = os.path.splitext(file_name)
+                if (
+                    _file_name not in self._file_names
+                ):  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
+                    continue
+
+                img_path = os.path.join(
+                    self.data_dir, profile, file_name
+                )  # (resized_data, 000004_male_Asian_54, mask1.jpg)
+                mask_label = self._file_names[_file_name]
+
+                self.image_paths.append(img_path)
+                self.mask_labels.append(mask_label)
+
+    def set_transform(self, transform):
+        """변환(transform)을 설정하는 메서드"""
+        self.transform = transform
+
+    def __getitem__(self, index):
+        """인덱스에 해당하는 데이터를 가져오는 메서드"""
+        # assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
+
+        origin_image = self.read_image(index)
+        origin_mask_label = self.get_mask_label(index)
+
+        cutmix_index = random.randint(0, len(self.image_paths) - 1)
+        cutmix_image = self.read_image(cutmix_index)
+        cutmix_age_label = self.get_mask_label(cutmix_index)
+        augmented_img, augmented_label = self.cutmix_augmentation(
+            origin_image, origin_mask_label, cutmix_image, cutmix_age_label
+        )
+        if self.transform:
+            image_transform = self.transform(augmented_img)
+            return image_transform, augmented_label
+
+        # 라벨로 one-hot vector 리턴.
+        return augmented_img, augmented_label
+
+    def __len__(self):
+        """데이터셋의 길이를 반환하는 메서드"""
+        return len(self.image_paths)
+
+    def get_mask_label(self, index) -> MaskLabels:
+        """인덱스에 해당하는 마스크 라벨을 반환하는 메서드"""
+        return F.one_hot(torch.tensor(self.mask_labels[index] * 1), self.num_classes)
+
+    def read_image(self, index):
+        """인덱스에 해당하는 이미지를 읽는 메서드"""
+        image_path = self.image_paths[index]
+        return Image.open(image_path)
+
+    def split_dataset(self) -> Tuple[Subset, Subset]:
+        """데이터셋을 학습과 검증용으로 나누는 메서드
+        데이터셋을 train 과 val 로 나눕니다,
+        pytorch 내부의 torch.utils.data.random_split 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        n_val = int(len(self) * self.val_ratio)
+        n_train = len(self) - n_val
+        train_set, val_set = random_split(self, [n_train, n_val])
+        return train_set, val_set
+
+    def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 일반 K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        KFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        kf = KFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in kf.split(self):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.mask_labels)[train_index]
+            label_test = np.array(self.mask_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def split_dataset3(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 Stratified K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in skf.split(range(len(self)), self.mask_labels):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.mask_labels)[train_index]
+            label_test = np.array(self.mask_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def calc_statistics(self):
+        """데이터셋의 통계치를 계산하는 메서드"""
+        has_statistics = self.mean is not None and self.std is not None
+        if not has_statistics:
+            print(
+                "[Warning] Calculating statistics... It can take a long time depending on your CPU machine"
+            )
+            sums = []
+            squared = []
+            for image_path in self.image_paths[:3000]:
+                image = np.array(Image.open(image_path)).astype(np.int32)
+                sums.append(image.mean(axis=(0, 1)))
+                squared.append((image**2).mean(axis=(0, 1)))
+
+            self.mean = np.mean(sums, axis=0) / 255
+            self.std = (np.mean(squared, axis=0) - self.mean**2) ** 0.5 / 255
+
+    @staticmethod
+    def denormalize_image(image, mean, std):
+        """정규화된 이미지를 원래대로 되돌리는 메서드"""
+        img_cp = image.copy()
+        img_cp *= std
+        img_cp += mean
+        img_cp *= 255.0
+        img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
+        return img_cp
+
+
+class CutMixAgeModelDataset(Dataset):
+    """AgeModel에 사용하기 위한 CutMix를 적용하는 데이터셋 클래스
+
+    Args:
+        data_dir (str): 데이터 위치
+        mean
+        std
+        val_ratio
+        cutmix_augmentation (CutMixVerticalAugmentation): CutMix 수행하는 Class
+        cutmix_prob (float): CutMix를 수행 할 확률
+        use_skewed (bool): 데이터가 skewed되어 있다면 skewe된 데이터만 mix하게 결정하는 flag
+        skew_prob (float): use_skewd가 True인 경우, 특정 확률로 skew된 데이터를 mix하도록 함.
+    """
+
+    num_classes = 3
+
+    image_paths = []
+    age_labels = []
+    skewed_image_paths = []
+    skewed_age_labels = []
+
+    _file_names = {
+        "mask1": MaskLabels.MASK,
+        "mask2": MaskLabels.MASK,
+        "mask3": MaskLabels.MASK,
+        "mask4": MaskLabels.MASK,
+        "mask5": MaskLabels.MASK,
+        "incorrect_mask": MaskLabels.INCORRECT,
+        "normal": MaskLabels.NORMAL,
+    }
+
+    def __init__(
+        self,
+        data_dir,
+        mean=(0.548, 0.504, 0.479),
+        std=(0.237, 0.247, 0.246),
+        val_ratio=0.2,
+        cutmix_prob=0.49,
+        one_hot=True,
+        use_skewed=True,
+        skew_prob=0.6,
+    ):
+        self.data_dir = data_dir
+        self.val_ratio = val_ratio
+        self.mean = mean
+        self.std = std
+        self.transform = None
+        self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
+        self.use_skewed = use_skewed
+        self.skew_prob = skew_prob
+        self.setup()  # 데이터셋을 설정
+        self.calc_statistics()
+
+    def setup(self):
+        """데이터 디렉토리로부터 이미지 경로와 라벨을 설정하는 메서드"""
+        profiles = os.listdir(self.data_dir)
+        for profile in profiles:
+            if profile.startswith("."):  # "." 로 시작하는 파일은 무시합니다
+                continue
+
+            img_folder = os.path.join(self.data_dir, profile)
+            for file_name in os.listdir(img_folder):
+                _file_name, ext = os.path.splitext(file_name)
+                if (
+                    _file_name not in self._file_names
+                ):  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
+                    continue
+
+                img_path = os.path.join(
+                    self.data_dir, profile, file_name
+                )  # (resized_data, 000004_male_Asian_54, mask1.jpg)
+                id, gender, race, age = profile.split("_")
+                age_label = AgeLabels.from_number(age)
+
+                self.image_paths.append(img_path)
+                self.age_labels.append(age_label)
+
+                if age_label == AgeLabels.OLD:
+                    self.skewed_image_paths.append(img_path)
+                    self.skewed_age_labels.append(age_label)
+
+    def set_transform(self, transform):
+        """변환(transform)을 설정하는 메서드"""
+        self.transform = transform
+
+    def __getitem__(self, index):
+        """인덱스에 해당하는 데이터를 가져오는 메서드"""
+        # assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
+
+        origin_image = self.read_image(index)
+        origin_age_label = self.get_age_label(index)
+
+        if self.use_skewed and random.random() < self.skew_prob:
+            cutmix_index = random.randint(0, len(self.skewed_image_paths) - 1)
+            cutmix_image = self.read_image(cutmix_index, self.use_skewed)
+            cutmix_age_label = self.get_age_label(cutmix_index, self.use_skewed)
+
+        else:
+            cutmix_index = random.randint(0, len(self.image_paths) - 1)
+            cutmix_image = self.read_image(cutmix_index)
+            cutmix_age_label = self.get_age_label(cutmix_index)
+
+        augmented_img, augmented_label = self.cutmix_augmentation(
+            origin_image, origin_age_label, cutmix_image, cutmix_age_label
+        )
+        if self.transform:
+            image_transform = self.transform(augmented_img)
+            return image_transform, augmented_label
+
+        # 라벨로 one-hot vector 리턴.
+        return augmented_img, augmented_label
+
+    def __len__(self):
+        """데이터셋의 길이를 반환하는 메서드"""
+        return len(self.image_paths)
+
+    def get_age_label(self, index, skewed=False) -> AgeLabels:
+        """인덱스에 해당하는 나이 라벨을 반환하는 메서드"""
+        if skewed:
+            return F.one_hot(
+                torch.tensor(self.skewed_age_labels[index] * 1), self.num_classes
+            )
+        return F.one_hot(torch.tensor(self.age_labels[index] * 1), self.num_classes)
+
+    def read_image(self, index, skewed=False):
+        """인덱스에 해당하는 이미지를 읽는 메서드"""
+        if skewed:
+            image_path = self.skewed_image_paths[index]
+        else:
+            image_path = self.image_paths[index]
+        return Image.open(image_path)
+
+    def split_dataset(self) -> Tuple[Subset, Subset]:
+        """데이터셋을 학습과 검증용으로 나누는 메서드
+        데이터셋을 train 과 val 로 나눕니다,
+        pytorch 내부의 torch.utils.data.random_split 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        n_val = int(len(self) * self.val_ratio)
+        n_train = len(self) - n_val
+        train_set, val_set = random_split(self, [n_train, n_val])
         return train_set, val_set
 
     def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
@@ -885,3 +1404,205 @@ class GenderModelDataset(Dataset):
         img_cp *= 255.0
         img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
         return img_cp
+
+
+class CutMixGenderModelDataset(Dataset):
+    """GenderModel에 사용하기 위한 CutMix를 적용하는 데이터셋 클래스
+
+    Args:
+        data_dir (str): 데이터 위치
+        mean
+        std
+        val_ratio
+        cutmix_augmentation (CutMixVerticalAugmentation): CutMix 수행하는 Class
+        cutmix_prob (float): CutMix를 수행 할 확률
+
+    """
+
+    num_classes = 2
+
+    image_paths = []
+    gender_labels = []
+
+    _file_names = {
+        "mask1": MaskLabels.MASK,
+        "mask2": MaskLabels.MASK,
+        "mask3": MaskLabels.MASK,
+        "mask4": MaskLabels.MASK,
+        "mask5": MaskLabels.MASK,
+        "incorrect_mask": MaskLabels.INCORRECT,
+        "normal": MaskLabels.NORMAL,
+    }
+
+    def __init__(
+        self,
+        data_dir,
+        mean=(0.548, 0.504, 0.479),
+        std=(0.237, 0.247, 0.246),
+        val_ratio=0.2,
+        cutmix_prob=0.49,
+        one_hot=True,
+    ):
+        self.data_dir = data_dir
+        self.val_ratio = val_ratio
+        self.mean = mean
+        self.std = std
+        self.transform = None
+        self.cutmix_augmentation = CutMixVerticalAugmentation(cutmix_prob)
+        self.setup()  # 데이터셋을 설정
+        self.calc_statistics()
+
+    def setup(self):
+        """데이터 디렉토리로부터 이미지 경로와 라벨을 설정하는 메서드"""
+        profiles = os.listdir(self.data_dir)
+        for profile in profiles:
+            if profile.startswith("."):  # "." 로 시작하는 파일은 무시합니다
+                continue
+
+            img_folder = os.path.join(self.data_dir, profile)
+            for file_name in os.listdir(img_folder):
+                _file_name, ext = os.path.splitext(file_name)
+                if (
+                    _file_name not in self._file_names
+                ):  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
+                    continue
+
+                img_path = os.path.join(
+                    self.data_dir, profile, file_name
+                )  # (resized_data, 000004_male_Asian_54, mask1.jpg)
+                id, gender, race, age = profile.split("_")
+                gender_label = GenderLabels.from_str(gender)
+
+                self.image_paths.append(img_path)
+                self.gender_labels.append(gender_label)
+
+    def set_transform(self, transform):
+        """변환(transform)을 설정하는 메서드"""
+        self.transform = transform
+
+    def __getitem__(self, index):
+        """인덱스에 해당하는 데이터를 가져오는 메서드"""
+        # assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
+
+        origin_image = self.read_image(index)
+        origin_age_label = self.get_gender_label(index)
+
+        cutmix_index = random.randint(0, len(self.image_paths) - 1)
+        cutmix_image = self.read_image(cutmix_index)
+        cutmix_gender_label = self.get_gender_label(cutmix_index)
+        augmented_img, augmented_label = self.cutmix_augmentation(
+            origin_image, origin_age_label, cutmix_image, cutmix_gender_label
+        )
+        if self.transform:
+            image_transform = self.transform(augmented_img)
+            return image_transform, augmented_label
+        # 라벨로 one-hot vector 리턴.
+        return augmented_img, augmented_label
+
+    def __len__(self):
+        """데이터셋의 길이를 반환하는 메서드"""
+        return len(self.image_paths)
+
+    def get_gender_label(self, index) -> GenderLabels:
+        """인덱스에 해당하는 성별 라벨을 반환하는 메서드"""
+        return F.one_hot(torch.tensor(self.gender_labels[index] * 1), self.num_classes)
+
+    def read_image(self, index):
+        """인덱스에 해당하는 이미지를 읽는 메서드"""
+        image_path = self.image_paths[index]
+        return Image.open(image_path)
+
+    def split_dataset(self) -> Tuple[Subset, Subset]:
+        """데이터셋을 학습과 검증용으로 나누는 메서드
+        데이터셋을 train 과 val 로 나눕니다,
+        pytorch 내부의 torch.utils.data.random_split 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        n_val = int(len(self) * self.val_ratio)
+        n_train = len(self) - n_val
+        train_set, val_set = random_split(self, [n_train, n_val])
+        return train_set, val_set
+
+    def split_dataset2(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 일반 K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        KFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        kf = KFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in kf.split(self):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.gender_labels)[train_index]
+            label_test = np.array(self.gender_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def split_dataset3(self, k) -> Generator[Tuple[Subset, Subset], None, None]:
+        """데이터셋을 Stratified K-Fold CV를 이용해 학습과 검증용으로 나누는 메서드
+        데이터셋에 대해 호출 시마다 새로운 train 과 val 로 나눕니다,
+        StratifiedKFold 함수를 사용하여 torch.utils.data.Subset 클래스 둘로 나눕니다.
+        """
+        skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        for train_index, val_index in skf.split(range(len(self)), self.gender_labels):
+            train_set = Subset(self, train_index)
+            val_set = Subset(self, val_index)
+            label_train = np.array(self.gender_labels)[train_index]
+            label_test = np.array(self.gender_labels)[val_index]
+            print("학습 레이블 데이터 분포:\n", pd.DataFrame(label_train).value_counts())
+            print("검증 레이블 데이터 분포:\n", pd.DataFrame(label_test).value_counts())
+            yield train_set, val_set
+
+    def calc_statistics(self):
+        """데이터셋의 통계치를 계산하는 메서드"""
+        has_statistics = self.mean is not None and self.std is not None
+        if not has_statistics:
+            print(
+                "[Warning] Calculating statistics... It can take a long time depending on your CPU machine"
+            )
+            sums = []
+            squared = []
+            for image_path in self.image_paths[:3000]:
+                image = np.array(Image.open(image_path)).astype(np.int32)
+                sums.append(image.mean(axis=(0, 1)))
+                squared.append((image**2).mean(axis=(0, 1)))
+
+            self.mean = np.mean(sums, axis=0) / 255
+            self.std = (np.mean(squared, axis=0) - self.mean**2) ** 0.5 / 255
+
+    @staticmethod
+    def denormalize_image(image, mean, std):
+        """정규화된 이미지를 원래대로 되돌리는 메서드"""
+        img_cp = image.copy()
+        img_cp *= std
+        img_cp += mean
+        img_cp *= 255.0
+        img_cp = np.clip(img_cp, 0, 255).astype(np.uint8)
+        return img_cp
+
+
+def seed_everything(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if use multi-GPU
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+def increment_path(path, exist_ok=False):
+    """Automatically increment path, i.e. runs/exp --> runs/exp0, runs/exp1 etc.
+
+    Args:
+        path (str or pathlib.Path): f"{model_dir}/{args.name}".
+        exist_ok (bool): whether increment path (increment if False).
+    """
+    path = Path(path)
+    if (path.exists() and exist_ok) or (not path.exists()):
+        return str(path)
+    else:
+        dirs = glob.glob(f"{path}*")
+        matches = [re.search(rf"%s(\d+)" % path.stem, d) for d in dirs]
+        i = [int(m.groups()[0]) for m in matches if m]
+        n = max(i) + 1 if i else 2
+        return f"{path}{n}"

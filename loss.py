@@ -15,6 +15,8 @@ class FocalLoss(nn.Module):
 
     def forward(self, input_tensor, target_tensor):
         log_prob = F.log_softmax(input_tensor, dim=-1)
+        if target_tensor.dim() != 1:
+            target_tensor = torch.argmax(target_tensor, dim=-1)
         prob = torch.exp(log_prob)
         return F.nll_loss(
             ((1 - prob) ** self.gamma) * log_prob,
@@ -71,12 +73,37 @@ class F1Loss(nn.Module):
         return 1 - f1.mean()
 
 
+class OneHotF1Loss(nn.Module):
+    """
+    label이 one-hot style로 나오는 경우 사용하는 F1Loss
+    """
+
+    def __init__(self, classes=3, epsilon=1e-7):
+        super().__init__()
+        self.classes = classes
+        self.epsilon = epsilon
+
+    def forward(self, y_pred, y_true):
+        tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
+        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
+        fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
+        fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
+
+        precision = tp / (tp + fp + self.epsilon)
+        recall = tp / (tp + fn + self.epsilon)
+
+        f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
+        f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
+        return 1 - f1.mean()
+
+
 # 사용 가능한 손실 함수의 진입점
 _criterion_entrypoints = {
     "cross_entropy": nn.CrossEntropyLoss,
     "focal": FocalLoss,
     "label_smoothing": LabelSmoothingLoss,
     "f1": F1Loss,
+    "one_hot_f1": OneHotF1Loss,
 }
 
 

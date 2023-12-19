@@ -1,6 +1,8 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+
 
 class BaseModel(nn.Module):
     """
@@ -47,7 +49,9 @@ class BaseModel(nn.Module):
 
         x = self.avgpool(x)
         x = x.view(-1, 128)
-        return self.fc(x)
+        x = self.fc(x)
+
+        return torch.softmax(x, dim=-1)
 
 
 # Custom Model Template
@@ -70,4 +74,4 @@ class MyModel(nn.Module):
         2. 결과로 나온 output 을 return 해주세요
         """
         x = self.resnet34(x)
-        return x
+        return torch.softmax(x, dim=-1)
