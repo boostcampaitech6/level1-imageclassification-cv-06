@@ -171,7 +171,7 @@ def train(data_dir, model_dir, args):
 
     # -- loss & metric
     criterion = create_criterion(
-        args.criterion, classes=dataset.num_classes
+        args.criterion,  # classes=dataset.num_classes
     )  # default: cross_entropy
     opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
 
@@ -286,6 +286,7 @@ def train(data_dir, model_dir, args):
                     labels = labels.to(device)
 
                     outs = model(inputs)
+
                     if args.eval_f1:
                         preds = torch.argmax(outs, dim=-1)
                         # F1 점수 계산
@@ -358,18 +359,18 @@ def train(data_dir, model_dir, args):
                 if args.eval_f1:
                     val_f1 = np.mean(val_f1_items)  # 평균 F1 점수 계산
 
-                if val_acc > best_val_acc:
-                    print(
-                        f"New best model for val accuracy : {val_acc:4.2%}. saving the best model.."
-                    )
-
-                    if args.eval_f1:
-                        print(f"val f1 : {val_f1:.4f}!")
-
-                    torch.save(
-                        model.module.state_dict(),
-                        f"{save_dir}/{args.model_type}_best.pth",
-                    )
+                if val_acc > best_val_acc or (
+                    val_acc == best_val_acc and val_loss < best_val_loss
+                ):
+                    # print(
+                    #     f"New best model for val accuracy : {val_acc:4.2%}! saving the best model.."
+                    # )
+                    # torch.save(
+                    #     model.module.state_dict(),
+                    #     f"{save_dir}/{args.model_type}_best.pth",
+                    # )
+                    best_model_weights = model.module.state_dict()
+                    best_val_loss = val_loss
                     best_val_acc = val_acc
 
                     if args.eval_f1:
@@ -396,6 +397,25 @@ def train(data_dir, model_dir, args):
 
                 logger.add_figure("results", figure, epoch)
                 print()
+        torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
+
+
+def str2bool(v):
+    """
+        argument로 True, False 값을 받아오기위한 함수
+
+    Args:
+        v (str): true, false와 같은 문자열
+
+    Returns:
+        bool : True or False
+    """
+    if v.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif v.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise argparse.ArgumentTypeError("Boolean value expected.")
 
 
 def str2bool(v):
