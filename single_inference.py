@@ -2,13 +2,12 @@ import argparse
 import multiprocessing
 import os
 from importlib import import_module
-import sys
+
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
 from ensemble import create_ensemble
-
 
 from dataset import AgeModelDataset, GenderModelDataset, MaskModelDataset, TestDataset
 
@@ -52,26 +51,29 @@ def inference(data_dir, model_dir, output_dir, args):
 
     # CUDA를 사용할 수 있는지 확인
     use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if use_cuda else "cpu")
 
     # 클래스의 개수를 설정한다. (마스크, 성별, 나이의 조합으로 총 Combination은 18)
     age_num_classes = AgeModelDataset.num_classes  # 3
     gender_num_classes = GenderModelDataset.num_classes  # 2
     mask_num_classes = MaskModelDataset.num_classes  # 3
     
-    age_model = load_model(f'{model_dir}/age_model_best.pth', 'age_model', age_num_classes, device).to(device)
-    
+    if args.model_type.lower() == 'age':
+        model = load_model(f'{model_dir}/age_model_best.pth', 'age_model', age_num_classes, device).to(device)
+    elif args.model_type.lower() == 'gender':
+        model = load_model(f'{model_dir}/gender_model_best.pth', 'gender_model', gender_num_classes, device).to(device)
+    elif args.model_type.lower() == 'mask':
+        model = load_model(f'{model_dir}/mask_model_best.pth', 'mask_model', mask_num_classes, device).to(device)
+    """
+    앙상블 하려면
+    """
     models_info = {
     'resnet50': '/home/level1/code/cv6/mask_model_resnet50/mask_model_best.pth',
     'ViT16': '/home/level1/code/cv6/mask_model_vit/mask_model_best.pth'
     }
-    gender_model = load_model(f'{model_dir}/gender_model_best.pth', 'gender_model', gender_num_classes, device).to(device)
-    mask_model = create_ensemble(models_info, mask_num_classes, device).to(device)
+    model = create_ensemble(models_info, mask_num_classes, device).to(device)
 
-    age_model.eval()
-    gender_model.eval()
-    mask_model.eval()
-
+    model.eval()
 
     # 이미지 파일 경로와 정보 파일을 읽어온다.
     img_root = os.path.join(data_dir, "images")
@@ -80,34 +82,37 @@ def inference(data_dir, model_dir, output_dir, args):
 
     # 이미지 경로를 리스트로 생성한다.
     img_paths = [os.path.join(img_root, img_id) for img_id in info.ImageID]
+   
+    
+    if args.model_type.lower() == 'age':
+        dataset = TestDataset(img_paths, args)
+        transform_module = getattr(
+            import_module("dataset"), args.age_augmentation
+        )  # default: BaseAugmentation
+        transform = transform_module(args, dataset)
+        dataset.set_transform(transform)
+
+    elif args.model_type.lower() == 'gender':
+
+        dataset = TestDataset(img_paths, args)
+        transform_module = getattr(
+            import_module("dataset"), args.gender_augmentation
+        )  # default: BaseAugmentation
+        transform = transform_module(args, dataset)
+        dataset.set_transform(transform)
+
+    elif args.model_type.lower() == 'mask':
+
+        dataset = TestDataset(img_paths, args)
+        transform_module = getattr(
+            import_module("dataset"), args.mask_augmentation
+        )  # default: BaseAugmentation
+        transform = transform_module(args, dataset)
+        dataset.set_transform(transform)
 
 
-    age_dataset = TestDataset(img_paths, args)
-    transform_module = getattr(
-        import_module("dataset"), args.age_augmentation
-    )  # default: BaseAugmentation
-    transform = transform_module(args, age_dataset)
-    age_dataset.set_transform(transform)
-
-
-    gender_dataset = TestDataset(img_paths, args)
-    transform_module = getattr(
-        import_module("dataset"), args.gender_augmentation
-    )  # default: BaseAugmentation
-    transform = transform_module(args, gender_dataset)
-    gender_dataset.set_transform(transform)
-
-
-    mask_dataset = TestDataset(img_paths, args)
-    transform_module = getattr(
-        import_module("dataset"), args.mask_augmentation
-    )  # default: BaseAugmentation
-    transform = transform_module(args, mask_dataset)
-    mask_dataset.set_transform(transform)
-
-
-    age_loader = torch.utils.data.DataLoader(
-        age_dataset,
+    dataloader = torch.utils.data.DataLoader(
+        dataset,
         batch_size=args.batch_size,
         num_workers=multiprocessing.cpu_count() // 2,
         shuffle=False,
@@ -115,61 +120,41 @@ def inference(data_dir, model_dir, output_dir, args):
         drop_last=False,
     )
 
-    gender_loader = torch.utils.data.DataLoader(
-        gender_dataset,
-        batch_size=args.batch_size,
-        num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=False,
-        pin_memory=use_cuda,
-        drop_last=False,
-    )
-
-    mask_loader = torch.utils.data.DataLoader(
-        mask_dataset,
-        batch_size=args.batch_size,
-        num_workers=multiprocessing.cpu_count() // 2,
-        shuffle=False,
-        pin_memory=use_cuda,
-        drop_last=False,
-    )
 
     print("Start calculating inference results..")
-    age_preds = []
-    gender_preds = []
-    mask_preds = []
+    preds = []
 
     with torch.no_grad():
-        print("Inferencing age...")
-        for idx, images in enumerate(age_loader):
-            images = images.to(device)
-            pred = age_model(images)
-            pred = pred.argmax(dim=-1)
-            age_preds.extend(pred.cpu().numpy())
+        if args.model_type.lower() == 'age':
+            print("Inferencing age...")
+            for idx, images in enumerate(dataloader):
+                images = images.to(device)
+                pred = model(images)
+                pred = pred.argmax(dim=-1)
+                preds.extend(pred.cpu().numpy())
         
-        print("Inferencing for age complete. Inferencing gender...")
-        for idx, images in enumerate(gender_loader):
-            images = images.to(device)
-            pred = gender_model(images)
-            pred = pred.argmax(dim=-1)
-            gender_preds.extend(pred.cpu().numpy())
+        elif args.model_type.lower() == 'gender':
+            print("Inferencing for age complete. Inferencing gender...")
+            for idx, images in enumerate(dataloader):
+                images = images.to(device)
+                pred = model(images)
+                pred = pred.argmax(dim=-1)
+                preds.extend(pred.cpu().numpy())
 
-        print("Inferencing for gender complete. Inferencing mask...")
-        for idx, images in enumerate(mask_loader):
-            images = images.to(device)
-            pred = mask_model(images)
-            pred = pred.argmax(dim=-1)
-            mask_preds.extend(pred.cpu().numpy())
+        elif args.model_type.lower() == 'mask':
+            print("Inferencing for gender complete. Inferencing mask...")
+            for idx, images in enumerate(dataloader):
+                images = images.to(device)
+                pred = model(images)
+                #pred = pred.argmax(dim=-1)
+                preds.extend(pred.cpu().numpy())
 
         print("Inferencing Complete!")
     
-    preds = []
-    for i in range(len(age_dataset)):
-        # 3개의 출력결과를 합쳐 18개의 Class로 통합해주는 부분
-        preds.append(mask_preds[i]*6+gender_preds[i]*3+age_preds[i])
     
     # 예측 결과를 데이터프레임에 저장하고 csv 파일로 출력한다.
     info["ans"] = preds
-    save_path = os.path.join(output_dir, f"output.csv")
+    save_path = os.path.join(output_dir, f"{args.outputname}.csv")
     info.to_csv(save_path, index=False)
     print(f"Inference Done! Inference result saved at {save_path}")
 
@@ -191,6 +176,11 @@ if __name__ == "__main__":
         type=int,
         default=(96, 128),
         help="resize size for image when you trained (default: (96, 128))",
+    )
+
+    parser.add_argument(
+        "--model_type",
+        type=str,
     )
     parser.add_argument(
         "--age_model", type=str, default="BaseModel", help="age model type (default: BaseModel)"
@@ -233,6 +223,11 @@ if __name__ == "__main__":
         default=os.environ.get("SM_OUTPUT_DATA_DIR", "./"),
     )
 
+    parser.add_argument(
+        "--outputname",
+        type=str,
+        default='output'
+    )
     args = parser.parse_args()
 
     data_dir = args.data_dir

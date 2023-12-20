@@ -15,6 +15,8 @@ from torchvision.transforms import (
     Compose,
     CenterCrop,
     ColorJitter,
+    AutoAugment,
+    AutoAugmentPolicy
 )
 
 # 지원되는 이미지 확장자 리스트
@@ -102,12 +104,10 @@ class CustomAugmentation:
     def __init__(self, agrs, dataset):
         self.transform = Compose(
             [
-                CenterCrop((320, 256)),
+                CenterCrop((384, 384)),
+                AutoAugment(AutoAugmentPolicy.IMAGENET),
                 Resize(agrs.resize, Image.BILINEAR),
-                ColorJitter(0.1, 0.1, 0.1, 0.1),
                 ToTensor(),
-                Normalize(mean=dataset.mean, std=dataset.std),
-                AddGaussianNoise(),
             ]
         )
 
@@ -435,7 +435,11 @@ class MaskModelDataset(Dataset):
         "mask4": MaskLabels.MASK,
         "mask5": MaskLabels.MASK,
         "incorrect_mask": MaskLabels.INCORRECT,
+        "incorrect_mask_aug1": MaskLabels.INCORRECT,
+        "incorrect_mask_aug2": MaskLabels.INCORRECT,
         "normal": MaskLabels.NORMAL,
+        "normal_aug1": MaskLabels.NORMAL,
+        "normal_aug2": MaskLabels.NORMAL,
     }
 
     image_paths = []
