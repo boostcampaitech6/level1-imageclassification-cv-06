@@ -1,0 +1,12 @@
+python single_inference.py \
+--data_dir /data/ephemeral/home/data/eval \
+--model_dir /data/ephemeral/home/level1-imageclassification-cv-06/best_model \
+--output_dir ./ \
+--age_model ResNet50fcadded \
+--gender_model MyModel \
+--mask_model MyModel \
+--age_augmentation BaseAugmentation \
+--gender_augmentation BaseAugmentation \
+--mask_augmentation BaseAugmentation \
+--model_type mask \
+--outputname Gooutput
