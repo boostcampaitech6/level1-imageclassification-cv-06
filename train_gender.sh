@@ -3,7 +3,7 @@ python train.py \
 --model_dir /data/ephemeral/home/project/level1-imageclassification-cv-06 \
 --model_type gender_model \
 --model  EfficientNetb0Custom \
---dataset GenderModelDataset \
+--dataset GenderSplitByProfileDataset \
 --criterion focal \
 --epochs 25 \
 --augmentation CustomAugmentation \
