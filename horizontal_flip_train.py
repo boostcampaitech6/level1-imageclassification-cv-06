@@ -6,6 +6,7 @@ from tqdm import tqdm
 from enum import Enum
 import os
 from PIL import ImageEnhance
+import random
 
 
 class AgeLabels(int, Enum):
@@ -88,11 +89,40 @@ for profile in tqdm(profiles, desc="Processing", unit="Folder"):
 
             enhancer = ImageEnhance.Sharpness(input)
             sharpened_img = enhancer.enhance(
-                2.0
+                4.0
             )  # enhance factor 2.0 means sharpened image
             sharpened_img.save(
                 os.path.join(data_dir, profile, (_file_name + "_sharpened" + ext))
             )
+
+            # rotated_img = input.rotate(15)  # rotate the image by 15 degrees
+            # rotated_img.save(os.path.join(data_dir, profile, (_file_name + '_rotated' + ext)))
+
+            rotate_degree = random.randint(
+                -10, 10
+            )  # generate a random integer between -10 and 10
+            rotated_img = input.rotate(
+                rotate_degree
+            )  # rotate the image by the random degree
+            rotated_img.save(
+                os.path.join(data_dir, profile, (_file_name + "_rotated" + ext))
+            )
+
+            rotate_degree = random.randint(
+                -10, 10
+            )  # generate a random integer between -10 and 10
+            rotated_img2 = input.rotate(
+                rotate_degree
+            )  # rotate the image by the random degree
+            rotated_img2.save(
+                os.path.join(data_dir, profile, (_file_name + "_rotated2" + ext))
+            )
+
+            grayscale_img = input.convert("L")  # convert the image to grayscale
+            grayscale_img = grayscale_img.convert("RGB")
+            grayscale_img.save(
+                os.path.join(data_dir, profile, (_file_name + "_grayscale" + ext))
+            )  # save the grayscale image
 
 
 # import onnxruntime as ort

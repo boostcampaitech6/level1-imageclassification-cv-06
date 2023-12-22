@@ -153,14 +153,18 @@ def train(data_dir, model_dir, args):
     dataset.set_transform(transform)
 
     # -- data_loader
-    k_fold_type = args.k_fold_type
-    k_fold = args.k_fold
-    if k_fold_type == 0:
+    # k_fold_type = args.k_fold_type
+    # k_fold = args.k_fold
+    if args.dataset != "AgeStratifiedKFoldDataset":
         splits = [dataset.split_dataset()]
-    elif k_fold_type == 1:
-        splits = dataset.split_dataset2(k_fold)
-    elif k_fold_type == 2:
-        splits = dataset.split_dataset3(k_fold)
+    else:
+        splits = dataset.split_dataset()
+    # if k_fold_type == 0:
+    #     splits = [dataset.split_dataset()]
+    # elif k_fold_type == 1:
+    #     splits = dataset.split_dataset2(k_fold)
+    # elif k_fold_type == 2:
+    #     splits = dataset.split_dataset3(k_fold)
 
     # -- model
     model_module = getattr(
@@ -193,6 +197,7 @@ def train(data_dir, model_dir, args):
     iter = 1
 
     for train_set, val_set in splits:
+        # print(f"{i+1}번째 fold")
         ### 학습 매 fold마다 독립적으로 진행되도록
         model = model_module(num_classes=num_classes).to(device)
         model = torch.nn.DataParallel(model)

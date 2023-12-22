@@ -16,12 +16,16 @@ from torchvision.transforms import (
     Compose,
     CenterCrop,
     ColorJitter,
+    AutoAugment,
+    AutoAugmentPolicy,
 )
 from copy import copy
 from sklearn.model_selection import StratifiedKFold
 import pandas as pd
 from typing import Generator
 from sklearn.model_selection import KFold
+import cv2
+from PIL import Image
 
 # 지원되는 이미지 확장자 리스트
 IMG_EXTENSIONS = [
@@ -50,12 +54,48 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in IMG_EXTENSIONS)
 
 
+# class BaseAugmentation:
+#     """
+#     기본적인 Augmentation을 담당하는 클래스
+
+#     Attributes:
+#         transform (Compose): 이미지를 변환을 위한 torchvision.transforms.Compose 객체
+#     """
+
+#     def __init__(self, args, dataset):
+#         """
+#         Args:
+#             args (arguments): CLI로 받아온 argument.
+#             dataset (Dataset) :
+#         """
+#         self.transform = Compose(
+#             [
+#                 Resize(args.resize, Image.BILINEAR),
+#                 ToTensor(),
+#                 Normalize(mean=dataset.mean, std=dataset.std),
+#             ]
+#         )
+
+#     def __call__(self, image):
+#         """
+#         이미지에 저장된 transform 적용
+
+#         Args:
+#             Image (PIL.Image): Augumentation을 적용할 이미지
+
+#         Returns:
+#             Tensor: Argumentation이 적용된 이미지
+#         """
+#         return self.transform(image)
+
+
 class BaseAugmentation:
     """
     기본적인 Augmentation을 담당하는 클래스
 
     Attributes:
         transform (Compose): 이미지를 변환을 위한 torchvision.transforms.Compose 객체
+        net (cv2.dnn.readNet): OpenCV의 딥러닝 기반 얼굴 탐지기
     """
 
     def __init__(self, args, dataset):
@@ -71,6 +111,10 @@ class BaseAugmentation:
                 Normalize(mean=dataset.mean, std=dataset.std),
             ]
         )
+        self.net = cv2.dnn.readNetFromCaffe(
+            "/path/to/deploy.prototxt.txt",
+            "/path/to/res10_300x300_ssd_iter_140000.caffemodel",
+        )
 
     def __call__(self, image):
         """
@@ -82,6 +126,38 @@ class BaseAugmentation:
         Returns:
             Tensor: Argumentation이 적용된 이미지
         """
+        # convert PIL Image to OpenCV format
+        image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+        # detect faces
+        blob = cv2.dnn.blobFromImage(
+            cv2.resize(image_cv, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0)
+        )
+        self.net.setInput(blob)
+        detections = self.net.forward()
+
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > 0.5:
+                box = detections[0, 0, i, 3:7] * np.array(
+                    [
+                        image_cv.shape[1],
+                        image_cv.shape[0],
+                        image_cv.shape[1],
+                        image_cv.shape[0],
+                    ]
+                )
+                (x, y, w, h) = box.astype("int")
+                image_cv = image_cv[y:h, x:w]  # crop the face region
+
+        # check if the image is not empty
+        if image_cv.size != 0:
+            # convert back to PIL Image
+            image = Image.fromarray(cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB))
+        else:
+            # if the image is empty, use the original image
+            image = image
+
         return self.transform(image)
 
 
@@ -152,10 +228,10 @@ class CustomAugmentation:
             [
                 CenterCrop((320, 256)),
                 Resize(agrs.resize, Image.BILINEAR),
-                ColorJitter(0.1, 0.1, 0.1, 0.1),
+                # ColorJitter(0.1, 0.1, 0.1, 0.1),
                 ToTensor(),
                 Normalize(mean=dataset.mean, std=dataset.std),
-                AddGaussianNoise(),
+                # AddGaussianNoise(),
             ]
         )
 
@@ -266,7 +342,7 @@ class AgeLabels(int, Enum):
 
         if value < 30:
             return cls.YOUNG
-        elif value < 60:
+        elif value < 58:
             return cls.MIDDLE
         else:
             return cls.OLD
@@ -738,6 +814,27 @@ class AgeModelDataset(Dataset):
         "mask5_sharpened": MaskLabels.MASK,
         "incorrect_mask_sharpened": MaskLabels.INCORRECT,
         "normal_sharpened": MaskLabels.NORMAL,
+        "mask1_rotated": MaskLabels.MASK,
+        "mask2_rotated": MaskLabels.MASK,
+        "mask3_rotated": MaskLabels.MASK,
+        "mask4_rotated": MaskLabels.MASK,
+        "mask5_rotated": MaskLabels.MASK,
+        "incorrect_mask_rotated": MaskLabels.INCORRECT,
+        "normal_rotated": MaskLabels.NORMAL,
+        "mask1_rotated2": MaskLabels.MASK,
+        "mask2_rotated2": MaskLabels.MASK,
+        "mask3_rotated2": MaskLabels.MASK,
+        "mask4_rotated2": MaskLabels.MASK,
+        "mask5_rotated2": MaskLabels.MASK,
+        "incorrect_mask_rotated2": MaskLabels.INCORRECT,
+        "normal_rotated2": MaskLabels.NORMAL,
+        "mask1_grayscale": MaskLabels.MASK,
+        "mask2_grayscale": MaskLabels.MASK,
+        "mask3_grayscale": MaskLabels.MASK,
+        "mask4_grayscale": MaskLabels.MASK,
+        "mask5_grayscale": MaskLabels.MASK,
+        "incorrect_mask_grayscale": MaskLabels.INCORRECT,
+        "normal_grayscale": MaskLabels.NORMAL,
     }
 
     def __init__(
@@ -881,6 +978,119 @@ class AgeModelDataset(Dataset):
         return img_cp
 
 
+class AgeSplitByProfileDataset(AgeModelDataset):
+    """
+    train / val 나누는 기준을 이미지에 대해서 random 이 아닌 사람(profile)을 기준으로 나눕니다.
+    구현은 val_ratio 에 맞게 train / val 나누는 것을 이미지 전체가 아닌 사람(profile)에 대해서 진행하여 indexing 을 합니다.
+    이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
+    """
+
+    def __init__(
+        self,
+        data_dir,
+        mean=(0.548, 0.504, 0.479),
+        std=(0.237, 0.247, 0.246),
+        val_ratio=0.2,
+        one_hot=False,
+    ):
+        self.indices = defaultdict(list)
+        super().__init__(data_dir, mean, std, val_ratio, one_hot)
+
+    @staticmethod
+    def _split_profile(profiles, val_ratio):
+        """프로필을 학습과 검증용으로 나누는 메서드"""
+        length = len(profiles)
+        n_val = int(length * val_ratio)
+
+        val_indices = set(random.sample(range(length), k=n_val))
+        train_indices = set(range(length)) - val_indices
+        return {"train": train_indices, "val": val_indices}
+
+    def setup(self):
+        """데이터셋 설정을 하는 메서드. 프로필 기준으로 나눈다."""
+        profiles = os.listdir(self.data_dir)
+        profiles = [profile for profile in profiles if not profile.startswith(".")]
+        split_profiles = self._split_profile(profiles, self.val_ratio)
+
+        cnt = 0
+        for phase, indices in split_profiles.items():
+            for _idx in indices:
+                profile = profiles[_idx]
+                img_folder = os.path.join(self.data_dir, profile)
+                for file_name in os.listdir(img_folder):
+                    _file_name, ext = os.path.splitext(file_name)
+                    if (
+                        _file_name not in self._file_names
+                    ):  # "." 로 시작하는 파일 및 invalid 한 파일들은 무시합니다
+                        continue
+
+                    img_path = os.path.join(
+                        self.data_dir, profile, file_name
+                    )  # (resized_data, 000004_male_Asian_54, mask1.jpg)
+
+                    id, gender, race, age = profile.split("_")
+                    age_label = AgeLabels.from_number(age)
+
+                    self.image_paths.append(img_path)
+                    self.age_labels.append(age_label)
+
+                    self.indices[phase].append(cnt)
+                    cnt += 1
+
+    def split_dataset(self) -> List[Subset]:
+        """프로필 기준으로 나눈 데이터셋을 Subset 리스트로 반환하는 메서드"""
+        return [Subset(self, indices) for phase, indices in self.indices.items()]
+
+
+class AgeStratifiedKFoldDataset(AgeSplitByProfileDataset):
+    """
+    K-Fold를 적용하여 train / val 나누는 기준을 이미지에 대해서 random 이 아닌 사람(profile)을 기준으로 나눕니다.
+    StratifiedKFold를 사용하여 age_label 기준으로 균등하게 분배합니다.
+    """
+
+    def __init__(self, n_splits=5, shuffle=True, random_state=42, **kwargs):
+        super().__init__(**kwargs)
+        self.n_splits = n_splits
+        self.shuffle = shuffle
+        self.random_state = random_state
+
+    # def _split_profile(self, profiles, val_ratio=None):  # val_ratio는 사용되지 않으므로 _로 대체합니다.
+    #     """프로필을 학습과 검증용으로 나누는 메서드. StratifiedKFold를 사용합니다."""
+    #     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+    #     # 연령 라벨을 기준으로 StratifiedKFold
+    #     ages = [profile.split('_')[-1] for profile in profiles]  # 연령 정보 추출
+    #     return {"fold_{}".format(i): indices for i, (_, indices) in enumerate(skf.split(profiles, ages))}
+
+    # def split_dataset(self) -> List[Tuple[Subset, Subset]]:
+    #     """프로필 기준으로 나눈 데이터셋을 train/validation Subset 튜플의 리스트로 반환하는 메서드"""
+    #     subsets = [[Subset(self, indices) for phase, indices in self.indices.items() if phase.startswith("fold_{}".format(i))] for i in range(self.n_splits)]
+    #     assert all(len(subset) == 2 for subset in subsets), "Each fold should have exactly 2 datasets (train and validation)"
+    #     return [(subsets[i][0], subsets[i][1]) for i in range(len(subsets))]
+
+    def _split_profile(
+        self, profiles, val_ratio=None
+    ):  # val_ratio는 사용되지 않으므로 _로 대체합니다.
+        """프로필을 학습과 검증용으로 나누는 메서드. StratifiedKFold를 사용합니다."""
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+        # 연령 라벨을 기준으로 StratifiedKFold
+        ages = [profile.split("_")[-1] for profile in profiles]  # 연령 정보 추출
+        return {
+            "fold_{}".format(i): (train_indices, val_indices)
+            for i, (train_indices, val_indices) in enumerate(skf.split(profiles, ages))
+        }
+
+    def split_dataset(self) -> List[Tuple[Subset, Subset]]:
+        """프로필 기준으로 나눈 데이터셋을 train/validation Subset 튜플의 리스트로 반환하는 메서드"""
+        subsets = [
+            (Subset(self, train_indices), Subset(self, val_indices))
+            for phase, (train_indices, val_indices) in self.indices.items()
+            if phase.startswith("fold_")
+        ]
+        return subsets
+
+
 class GenderModelDataset(Dataset):
     """
     성별 데이터셋의 기본 클래스
@@ -902,6 +1112,41 @@ class GenderModelDataset(Dataset):
         "mask5": MaskLabels.MASK,
         "incorrect_mask": MaskLabels.INCORRECT,
         "normal": MaskLabels.NORMAL,
+        "mask1_horizontal_fliped": MaskLabels.MASK,
+        "mask2_horizontal_fliped": MaskLabels.MASK,
+        "mask3_horizontal_fliped": MaskLabels.MASK,
+        "mask4_horizontal_fliped": MaskLabels.MASK,
+        "mask5_horizontal_fliped": MaskLabels.MASK,
+        "incorrect_mask_horizontal_fliped": MaskLabels.INCORRECT,
+        "normal_horizontal_fliped": MaskLabels.NORMAL,
+        "mask1_sharpened": MaskLabels.MASK,
+        "mask2_sharpened": MaskLabels.MASK,
+        "mask3_sharpened": MaskLabels.MASK,
+        "mask4_sharpened": MaskLabels.MASK,
+        "mask5_sharpened": MaskLabels.MASK,
+        "incorrect_mask_sharpened": MaskLabels.INCORRECT,
+        "normal_sharpened": MaskLabels.NORMAL,
+        "mask1_rotated": MaskLabels.MASK,
+        "mask2_rotated": MaskLabels.MASK,
+        "mask3_rotated": MaskLabels.MASK,
+        "mask4_rotated": MaskLabels.MASK,
+        "mask5_rotated": MaskLabels.MASK,
+        "incorrect_mask_rotated": MaskLabels.INCORRECT,
+        "normal_rotated": MaskLabels.NORMAL,
+        "mask1_rotated2": MaskLabels.MASK,
+        "mask2_rotated2": MaskLabels.MASK,
+        "mask3_rotated2": MaskLabels.MASK,
+        "mask4_rotated2": MaskLabels.MASK,
+        "mask5_rotated2": MaskLabels.MASK,
+        "incorrect_mask_rotated2": MaskLabels.INCORRECT,
+        "normal_rotated2": MaskLabels.NORMAL,
+        "mask1_grayscale": MaskLabels.MASK,
+        "mask2_grayscale": MaskLabels.MASK,
+        "mask3_grayscale": MaskLabels.MASK,
+        "mask4_grayscale": MaskLabels.MASK,
+        "mask5_grayscale": MaskLabels.MASK,
+        "incorrect_mask_grayscale": MaskLabels.INCORRECT,
+        "normal_grayscale": MaskLabels.NORMAL,
     }
 
     def __init__(
@@ -1620,3 +1865,25 @@ def increment_path(path, exist_ok=False):
         i = [int(m.groups()[0]) for m in matches if m]
         n = max(i) + 1 if i else 2
         return f"{path}{n}"
+
+
+class MaskAugmentation:
+    def __init__(self, args, dataset):
+        self.transform = Compose(
+            [
+                CenterCrop((450, 240)),
+                AutoAugment(AutoAugmentPolicy.IMAGENET),
+                ToTensor(),
+                # RandomApply([
+                #     RandomHorizontalFlip(),
+                #     RandomRotation(15),
+                #     Normalize(mean=dataset.mean, std=dataset.std),
+                #     Grayscale(3),
+                #     RandomAdjustSharpness(4),
+                #     RandomAutocontrast()
+                # ], p=0.4)
+            ]
+        )
+
+    def __call__(self, image):
+        return self.transform(image)

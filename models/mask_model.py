@@ -75,3 +75,66 @@ class MyModel(nn.Module):
         """
         x = self.resnet34(x)
         return torch.softmax(x, dim=-1)
+
+
+class Resnet34(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.resnet34 = models.resnet34(pretrained=True)
+        in_features = self.resnet34.fc.in_features
+        self.resnet34.fc = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        x = self.resnet34(x)
+        return x
+
+
+class MaskCustomModel(nn.Module):
+    def __init__(self, num_classes, download=False):
+        super().__init__()
+
+        self.model_wear = Resnet34(2)
+        self.model_correct = Resnet34(2)
+
+        if download:
+            use_cuda = torch.cuda.is_available()
+            device = torch.device("cuda" if use_cuda else "cpu")
+            self.wear_path = "./best_model/mask_model_wear_notwear.pth"
+            self.correct_path = "./best_model/mask_model_correct_incorrect.pth"
+            # 모델 가중치를 로드한다.
+            self.model_wear.load_state_dict(
+                torch.load(self.wear_path, map_location=device)
+            )
+            self.model_correct.load_state_dict(
+                torch.load(self.correct_path, map_location=device)
+            )
+
+    def forward(self, x):
+        x1 = self.model_wear(x)
+        x1 = torch.argmax(x1, -1)
+
+        for i in range(len(x1)):
+            if x1[i] == 1:  # 쓴 경우
+                x2 = self.model_correct(x[i].unsqueeze(0))
+                x2 = torch.argmax(x2, -1)
+                if x2[0] == 0:  # 마스크가 정상인 경우
+                    x1[i] = 0
+                else:
+                    x1[i] = 1
+            else:  # 안쓴 경우
+                x1[i] = 2
+        return x1
+
+
+class ResNet50(nn.Module):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.resnet50 = models.resnet50(pretrained=True)
+        in_features = self.resnet50.fc.in_features
+        self.resnet50.fc = nn.Linear(in_features, num_classes)
+        # self.fc = nn.Linear(in_features // 2, num_classes)
+
+    def forward(self, x):
+        x = self.resnet50(x)
+        # x = self.fc(x)
+        return torch.softmax(x, dim=-1)

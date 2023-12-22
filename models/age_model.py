@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
+import timm
+from torchvision.models import densenet121
 
 
 class BaseModel(nn.Module):
@@ -81,10 +83,114 @@ class ResNet50(nn.Module):
         super().__init__()
         self.resnet50 = models.resnet50(pretrained=True)
         in_features = self.resnet50.fc.in_features
-        self.resnet50.fc = nn.Linear(in_features, in_features // 2)
-        self.fc = nn.Linear(in_features // 2, num_classes)
+        self.resnet50.fc = nn.Linear(in_features, num_classes)
+        # self.fc = nn.Linear(in_features // 2, num_classes)
 
     def forward(self, x):
         x = self.resnet50(x)
-        x = self.fc(x)
+        # x = self.fc(x)
+        return torch.softmax(x, dim=-1)
+
+
+# class ResNet50(nn.Module):
+#     def __init__(self, num_classes):
+#         super(ResNet50, self).__init__()
+#         self.resnet50 = models.resnet50(pretrained=True)
+
+#         # Freeze the layers
+#         for param in self.resnet50.parameters():
+#             param.requires_grad = False
+
+#         # Replace the last fully connected layer
+#         in_features = self.resnet50.fc.in_features
+#         self.resnet50.fc = nn.Linear(in_features, num_classes)
+
+#     def forward(self, x):
+#         x = self.resnet50(x)
+#         return torch.softmax(x, dim=-1)
+
+
+class ViT(nn.Module):
+    def __init__(self, num_classes):
+        super(ViT, self).__init__()
+        self.vit = timm.create_model(
+            "vit_base_patch16_224", pretrained=True, img_size=(128, 96)
+        )
+
+        # Replace the classifier layer
+        self.vit.head = nn.Linear(self.vit.head.in_features, num_classes)
+
+    def forward(self, x):
+        x = self.vit(x)
+        return torch.softmax(x, dim=-1)
+
+
+class EfficientNet(nn.Module):
+    def __init__(self, num_classes):
+        super(EfficientNet, self).__init__()
+        self.effnet = timm.create_model("tf_efficientnet_b0_ns", pretrained=True)
+
+        # Replace the classifier layer
+        self.effnet.classifier = nn.Linear(
+            self.effnet.classifier.in_features, num_classes
+        )
+
+    def forward(self, x):
+        x = self.effnet(x)
+        return torch.softmax(x, dim=-1)
+
+
+class ModifiedEfficientNet(nn.Module):
+    def __init__(self, num_classes):
+        super(ModifiedEfficientNet, self).__init__()
+        self.effnet = timm.create_model("tf_efficientnet_b0_ns", pretrained=True)
+
+        # Replace the classifier layer with a new one with Dropout and an additional FC layer
+        self.effnet.classifier = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(self.effnet.classifier.in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.effnet(x)
+        return torch.softmax(x, dim=-1)
+
+
+class ModifiedResNet(nn.Module):
+    def __init__(self, num_classes):
+        super(ModifiedResNet, self).__init__()
+        self.resnet = models.resnet50(pretrained=True)
+
+        # Freeze all layers
+        for param in self.resnet.parameters():
+            param.requires_grad = False
+
+        # Replace the last fc layer
+        self.resnet.fc = nn.Sequential(
+            nn.Linear(self.resnet.fc.in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.resnet(x)
+        return torch.softmax(x, dim=-1)
+
+
+class DenseNet(nn.Module):
+    def __init__(self, num_classes):
+        super(DenseNet, self).__init__()
+        self.densenet = densenet121(pretrained=True)
+
+        # 분류기 레이어를 교체합니다.
+        self.densenet.classifier = nn.Linear(
+            self.densenet.classifier.in_features, num_classes
+        )
+
+    def forward(self, x):
+        x = self.densenet(x)
         return torch.softmax(x, dim=-1)
