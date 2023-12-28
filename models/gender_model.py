@@ -87,7 +87,9 @@ class ResNet50Model(nn.Module):
         self.base_model.fc = nn.Linear(in_features, num_classes)
 
     def forward(self, x):
-        return self.base_model(x)
+        x = self.base_model(x)
+        x = F.softmax(x, dim = 1)
+        return x
     
 class ResNet34Model(nn.Module):
     def __init__(self, num_classes):
@@ -101,7 +103,9 @@ class ResNet34Model(nn.Module):
         self.base_model.fc = nn.Linear(in_features, num_classes)
 
     def forward(self, x):
-        return self.base_model(x)
+        x = self.base_model(x)
+        x = F.softmax(x, dim = 1)
+        return x
     
 class VGG16Custom(nn.Module):
     def __init__(self, num_classes):
@@ -114,29 +118,7 @@ class VGG16Custom(nn.Module):
         x = self.vgg(x)
         return x
 
-class InceptionV3Custom(nn.Module):
-    def __init__(self, num_classes):
-        super(InceptionV3Custom, self).__init__()
-        self.inception = torchvision.models.inception_v3(pretrained=True)
-        num_features = self.inception.fc.in_features
-        self.inception.fc = nn.Linear(num_features, num_classes)
 
-    def forward(self, x):
-        outputs = self.inception(x)
-        if isinstance(outputs, tuple):
-            return outputs[0]
-        return outputs
-    
-class MobileNetV2Custom(nn.Module):
-    def __init__(self, num_classes):
-        super(MobileNetV2Custom, self).__init__()
-        self.mobilenet = torchvision.models.mobilenet_v2(pretrained=True)
-        num_features = self.mobilenet.classifier[1].in_features
-        self.mobilenet.classifier[1] = nn.Linear(num_features, num_classes)
-
-    def forward(self, x):
-        x = self.mobilenet(x)
-        return x
 
 class EfficientNetb0Custom(nn.Module):
     # input size 224 224
@@ -151,8 +133,23 @@ class EfficientNetb0Custom(nn.Module):
     
     def forward(self, x):
         x = self.efficientnet(x)
+        x = F.softmax(x, dim=1)
         return x
 
+class ViT16(nn.Module):
+    def __init__(self, num_classes):
+        super(ViT16,self).__init__()
+        self.vit16 = timm.create_model('vit_base_patch16_224', pretrained=True)
+        in_features = self.vit16.head.in_features
+        new_fc_layer = nn.Linear(in_features, num_classes)
+
+        # 모델의 마지막 FC 레이어를 새로운 FC 레이어로 교체
+        self.vit16.head = new_fc_layer
+    
+    def forward(self, x):
+        x = self.vit16(x)
+        x = F.softmax(x, dim=1)
+        return x
 
 
 class SwinTransformerCustom(nn.Module):
