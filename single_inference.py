@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import AgeModelDataset, GenderModelDataset, MaskModelDataset, TestDataset
-
+import torch.nn.functional as F
 
 def load_model(saved_model, model_type, num_classes, device):
     """
@@ -120,7 +120,8 @@ def inference(data_dir, model_dir, output_dir, args):
             for idx, images in enumerate(dataloader):
                 images = images.to(device)
                 pred = model(images)
-                pred = pred.argmax(dim=-1)
+                if args.argmax:
+                    pred = pred.argmax(dim=-1)
                 preds.extend(pred.cpu().numpy())
         
         elif args.model_type.lower() == 'gender':
@@ -128,7 +129,11 @@ def inference(data_dir, model_dir, output_dir, args):
             for idx, images in enumerate(dataloader):
                 images = images.to(device)
                 pred = model(images)
-                pred = pred.argmax(dim=-1)
+                if args.argmax:
+                    pred = pred.argmax(dim=-1)
+                else:
+                # 소프트맥스 함수를 적용
+                    pred = torch.nn.functional.softmax(pred, dim=-1)
                 preds.extend(pred.cpu().numpy())
 
         elif args.model_type.lower() == 'mask':
@@ -136,7 +141,8 @@ def inference(data_dir, model_dir, output_dir, args):
             for idx, images in enumerate(dataloader):
                 images = images.to(device)
                 pred = model(images)
-                pred = pred.argmax(dim=-1)
+                if args.argmax:
+                    pred = pred.argmax(dim=-1)
                 preds.extend(pred.cpu().numpy())
 
         print("Inferencing Complete!")
@@ -194,6 +200,12 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--mask_augmentation", type=str, default="BaseAugmentation", help="mask augmentation type (default: BaseAugmentation)"
+    )
+
+    parser.add_argument(
+        "--argmax",
+        type=int,
+        default=1
     )
 
     # 컨테이너 환경 변수
