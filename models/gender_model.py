@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 import torchvision
 import timm
-
+from timm import create_model
 
 class BaseModel(nn.Module):
     """
@@ -153,3 +153,18 @@ class EfficientNetb0Custom(nn.Module):
         x = self.efficientnet(x)
         return x
 
+
+
+class SwinTransformerCustom(nn.Module):
+    def __init__(self, num_classes=18, model_name='swin_base_patch4_window7_224', pretrained=True):
+        super(SwinTransformerCustom, self).__init__()
+
+        # Swin Transformer 모델 불러오기
+        self.swin_transformer = create_model(model_name, pretrained=pretrained)
+
+        # Classifier 레이어 수정
+        in_features = self.swin_transformer.head.in_features
+        self.swin_transformer.head = nn.Linear(in_features, num_classes)
+
+    def forward(self, x):
+        return self.swin_transformer(x)
