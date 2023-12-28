@@ -1,4 +1,22 @@
-# CV Level1 - Image Classification
+# [네이버 부스트캠프 AI Tech 6기] Mask Classification Competition
+
+## 프로젝트 소개
+
+- Input data : 2,700명의 동양인 이미지. 한 명당 7장 _(마스크 착용*5, 미착용*1, 이상 착용1)_
+- Output : test 이미지에 대한 분류 값 (18개 클래스)
+  
+#### Output class
+3 * 2 * 3 = 18 class
+- Mask : (Wear, Incorrect, Not Wear)
+- Gender : (Male, Female)
+- Age : (<30, >=30 and <60, >=60)
+  
+
+  
+#### 평가방법
+- F1 Score
+
+<br>
 
 ## 프로젝트 구조
 
@@ -28,6 +46,10 @@ ${project}
 - result : inference에 대한 결과를 저장한다.
 - README.md
 - requirements.txt : contains the necessary packages to be installed
+
+
+<br>
+
 
 ## 사용방법
 
