@@ -201,10 +201,8 @@ def train(data_dir, model_dir, args):
             lr=args.lr,
             weight_decay=5e-4,
         )
-        scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+        scheduler = StepLR(optimizer, args.lr_decay_step, gamma=args.lr_decay_gamma)
 
-        # print("h")
-        # print(train_set, val_set)
         train_loader, val_loader = run(args, train_set, val_set)
         print(str(iter) + "번째 fold")
         iter += 1
@@ -397,6 +395,8 @@ def train(data_dir, model_dir, args):
 
                 logger.add_figure("results", figure, epoch)
                 print()
+            if (epoch + 1) % args.log_interval == 0:
+                torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
         torch.save(best_model_weights, f"{save_dir}/{args.model_type}_best.pth")
 
 
