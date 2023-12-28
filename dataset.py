@@ -15,9 +15,10 @@ from torchvision.transforms import (
     Normalize,
     Compose,
     CenterCrop,
-    ColorJitter
+    ColorJitter,
+    RandomHorizontalFlip,
+    RandomRotation,
 )
-
 
 
 # 지원되는 이미지 확장자 리스트
@@ -70,6 +71,7 @@ class BaseAugmentation:
             ]
         )
 
+
     def __call__(self, image):
         """
         이미지에 저장된 transform 적용
@@ -80,6 +82,7 @@ class BaseAugmentation:
         Returns:
             Tensor: Argumentation이 적용된 이미지
         """
+        
         return self.transform(image)
 
 
@@ -105,7 +108,9 @@ class CustomAugmentation:
     def __init__(self, agrs, dataset):
         self.transform = Compose(
             [
-                CenterCrop((320, 256)),
+                RandomHorizontalFlip(p=0.2),
+                RandomRotation(degrees=(-5,5)),
+                CenterCrop((400, 300)), # Be careful with aspect ratio
                 Resize(agrs.resize, Image.BILINEAR),
                 ColorJitter(0.1, 0.1, 0.1, 0.1),
                 ToTensor(),
